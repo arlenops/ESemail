@@ -2,6 +2,7 @@ package api
 
 import (
 	"esemail/internal/service"
+	"log"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -23,18 +24,26 @@ func (h *SetupHandler) GetSetupStatus(c *gin.Context) {
 }
 
 func (h *SetupHandler) ConfigureSystem(c *gin.Context) {
+	log.Printf("收到系统配置请求，来源IP: %s", c.ClientIP())
+	
 	var config service.SetupConfig
 
 	if err := c.ShouldBindJSON(&config); err != nil {
+		log.Printf("参数绑定失败: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求参数错误: " + err.Error()})
 		return
 	}
 
+	log.Printf("解析配置参数成功: 域名=%s, 管理员=%s, 主机名=%s", 
+		config.Domain, config.AdminEmail, config.Hostname)
+
 	if err := h.setupService.ConfigureSystem(config); err != nil {
+		log.Printf("系统配置失败: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	log.Printf("系统配置成功完成")
 	c.JSON(http.StatusOK, gin.H{
 		"message": "系统配置完成",
 		"next_steps": []string{
