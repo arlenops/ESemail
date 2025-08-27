@@ -122,33 +122,70 @@ log_success "acme.sh安装完成"
 
 # 创建系统用户
 log_info "创建系统用户..."
+
+# 创建esemail用户（如果不存在）
 if ! id "$ESEMAIL_USER" &>/dev/null; then
-    useradd -r -s /bin/bash -d "$ESEMAIL_HOME" -m "$ESEMAIL_USER"
+    useradd -r -s /bin/bash -d "$ESEMAIL_HOME" -m "$ESEMAIL_USER" || {
+        log_error "创建 $ESEMAIL_USER 用户失败"
+        exit 1
+    }
+    log_success "创建 $ESEMAIL_USER 用户成功"
+else
+    log_success "$ESEMAIL_USER 用户已存在"
 fi
 
-# 创建邮件用户
+# 创建vmail用户组和用户（如果不存在）
+if ! getent group vmail >/dev/null 2>&1; then
+    groupadd -g 5000 vmail || {
+        log_error "创建 vmail 组失败"
+        exit 1
+    }
+    log_success "创建 vmail 组成功"
+else
+    log_success "vmail 组已存在"
+fi
+
 if ! id "vmail" &>/dev/null; then
-    groupadd -g 5000 vmail
-    useradd -u 5000 -g vmail -d "$ESEMAIL_DATA/mail" -s /usr/sbin/nologin vmail
+    useradd -u 5000 -g vmail -d "$ESEMAIL_DATA/mail" -s /usr/sbin/nologin vmail || {
+        log_error "创建 vmail 用户失败"
+        exit 1
+    }
+    log_success "创建 vmail 用户成功"
+else
+    log_success "vmail 用户已存在"
 fi
 
 log_success "系统用户创建完成"
 
 # 创建目录结构
 log_info "创建目录结构..."
-mkdir -p "$ESEMAIL_HOME"
-mkdir -p "$ESEMAIL_DATA"/{mail,db,acme}
-mkdir -p "$ESEMAIL_CONFIG"
-mkdir -p /etc/ssl/mail
-mkdir -p /etc/opendkim/keys
-mkdir -p /var/log/esemail
-mkdir -p /var/spool/postfix/rspamd
+mkdir -p "$ESEMAIL_HOME" || { log_error "创建 $ESEMAIL_HOME 目录失败"; exit 1; }
+mkdir -p "$ESEMAIL_DATA"/{mail,db,acme} || { log_error "创建数据目录失败"; exit 1; }
+mkdir -p "$ESEMAIL_CONFIG" || { log_error "创建配置目录失败"; exit 1; }
+mkdir -p /etc/ssl/mail || { log_error "创建SSL目录失败"; exit 1; }
+mkdir -p /etc/opendkim/keys || { log_error "创建OpenDKIM目录失败"; exit 1; }
+mkdir -p /var/log/esemail || { log_error "创建日志目录失败"; exit 1; }
+mkdir -p /var/spool/postfix/rspamd || { log_error "创建Postfix目录失败"; exit 1; }
 
-# 设置权限
-chown -R "$ESEMAIL_USER:$ESEMAIL_USER" "$ESEMAIL_HOME"
-chown -R vmail:vmail "$ESEMAIL_DATA/mail"
-chown -R opendkim:opendkim /etc/opendkim
-chmod 755 "$ESEMAIL_CONFIG"
+# 设置权限（带错误检查）
+chown -R "$ESEMAIL_USER:$ESEMAIL_USER" "$ESEMAIL_HOME" 2>/dev/null || {
+    log_warning "设置 $ESEMAIL_HOME 权限失败，继续执行..."
+}
+
+chown -R vmail:vmail "$ESEMAIL_DATA/mail" 2>/dev/null || {
+    log_warning "设置邮件目录权限失败，继续执行..."
+}
+
+# 检查opendkim用户是否存在（可能还没安装opendkim）
+if id "opendkim" &>/dev/null; then
+    chown -R opendkim:opendkim /etc/opendkim 2>/dev/null || {
+        log_warning "设置OpenDKIM权限失败，继续执行..."
+    }
+else
+    log_info "OpenDKIM用户不存在，稍后安装OpenDKIM后会自动设置权限"
+fi
+
+chmod 755 "$ESEMAIL_CONFIG" || { log_error "设置配置目录权限失败"; exit 1; }
 
 log_success "目录结构创建完成"
 
@@ -248,6 +285,17 @@ passdb {
 EOF
 
 log_success "邮件服务配置完成"
+
+# 现在OpenDKIM已安装，设置其权限
+log_info "设置OpenDKIM权限..."
+if id "opendkim" &>/dev/null; then
+    chown -R opendkim:opendkim /etc/opendkim 2>/dev/null || {
+        log_warning "设置OpenDKIM权限失败，但继续执行..."
+    }
+    log_success "OpenDKIM权限设置完成"
+else
+    log_warning "OpenDKIM用户仍不存在，权限设置跳过"
+fi
 
 # 创建systemd服务
 log_info "创建systemd服务..."
