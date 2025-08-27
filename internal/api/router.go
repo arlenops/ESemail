@@ -4,9 +4,41 @@ import (
 	"esemail/internal/config"
 	"esemail/internal/service"
 	"net/http"
+	"os"
+	"path/filepath"
 
 	"github.com/gin-gonic/gin"
 )
+
+// findResourcePath 查找资源文件路径，支持多种部署结构
+func findResourcePath(resourceType string) string {
+	// 可能的路径列表
+	possiblePaths := []string{
+		filepath.Join("web", resourceType),           // 相对路径 (开发环境)
+		filepath.Join("src", "web", resourceType),   // src子目录
+		filepath.Join("..", "web", resourceType),    // 上级目录
+	}
+	
+	// 获取当前可执行文件目录
+	executable, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(executable)
+		possiblePaths = append(possiblePaths, []string{
+			filepath.Join(execDir, "web", resourceType),
+			filepath.Join(execDir, "src", "web", resourceType),
+			filepath.Join(execDir, "..", "web", resourceType),
+		}...)
+	}
+	
+	// 检查每个可能的路径
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	
+	return ""
+}
 
 func SetupRouter(
 	cfg *config.Config,
@@ -24,8 +56,16 @@ func SetupRouter(
 
 	r := gin.Default()
 
-	r.LoadHTMLGlob("web/templates/*")
-	r.Static("/static", "web/static")
+	// 自动检测模板和静态文件路径
+	templatesPath := findResourcePath("templates")
+	staticPath := findResourcePath("static")
+	
+	if templatesPath != "" {
+		r.LoadHTMLGlob(filepath.Join(templatesPath, "*"))
+	}
+	if staticPath != "" {
+		r.Static("/static", staticPath)
+	}
 
 	r.GET("/", func(c *gin.Context) {
 		// 检查系统是否已设置
