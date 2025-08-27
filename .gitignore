@@ -1,0 +1,59 @@
+# 编译输出
+esemail
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/tmp/
+
+# 测试文件
+*.test
+*.out
+coverage.txt
+coverage.html
+
+# Go 依赖
+/vendor/
+go.sum
+
+# 配置文件
+config.yml
+.env
+.env.local
+
+# 数据目录
+/data/
+/logs/
+/ssl/
+
+# Docker 相关
+docker-compose.override.yml
+docker-compose.prod.yml
+
+# IDE 配置
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 开发环境
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# 备份文件
+*.backup
+*.bak
+*.tmp

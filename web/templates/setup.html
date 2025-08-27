@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESemail 系统配置</title>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/dashboard.css" rel="stylesheet">
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <style>
+        .setup-container {
+            max-width: 800px;
+            margin: 50px auto;
+        }
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        .step {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #dee2e6;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 10px;
+            font-weight: bold;
+            position: relative;
+        }
+        .step.active {
+            background-color: #007bff;
+            color: white;
+        }
+        .step.completed {
+            background-color: #28a745;
+            color: white;
+        }
+        .step::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50px;
+            width: 60px;
+            height: 2px;
+            background-color: #dee2e6;
+            transform: translateY(-50%);
+        }
+        .step:last-child::after {
+            display: none;
+        }
+        .step.completed::after {
+            background-color: #28a745;
+        }
+        .form-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .dns-record {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .copy-button {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <div class="setup-container">
+        <div class="text-center mb-4">
+            <h1 class="display-4 text-primary">🚀 ESemail</h1>
+            <p class="lead">轻量化邮局系统配置向导</p>
+        </div>
+
+        <div class="step-indicator">
+            <div class="step active" id="step-1">1</div>
+            <div class="step" id="step-2">2</div>
+            <div class="step" id="step-3">3</div>
+            <div class="step" id="step-4">4</div>
+        </div>
+
+        <!-- 步骤1: 基础配置 -->
+        <div id="step1-content" class="form-section">
+            <h3><i class="fas fa-cog"></i> 步骤1: 基础配置</h3>
+            <p class="text-muted">请填写您的邮件系统基础信息</p>
+            
+            <form id="basic-config-form">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">主域名 *</label>
+                            <input type="text" class="form-control" name="domain" placeholder="example.com" required>
+                            <small class="form-text text-muted">您要用于邮件服务的主域名</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">邮件服务器主机名 *</label>
+                            <input type="text" class="form-control" name="hostname" placeholder="mail.example.com" required>
+                            <small class="form-text text-muted">邮件服务器的完整域名(FQDN)</small>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">管理员邮箱 *</label>
+                            <input type="email" class="form-control" name="admin_email" placeholder="admin@example.com" required>
+                            <small class="form-text text-muted">系统管理员邮箱地址</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">管理员姓名 *</label>
+                            <input type="text" class="form-control" name="admin_name" placeholder="系统管理员" required>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">管理员密码 *</label>
+                    <input type="password" class="form-control" name="admin_pass" placeholder="请输入至少6位密码" required minlength="6">
+                    <small class="form-text text-muted">用于登录管理界面和管理员邮箱</small>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">下一步 <i class="fas fa-arrow-right"></i></button>
+            </form>
+        </div>
+
+        <!-- 步骤2: DNS配置指引 -->
+        <div id="step2-content" class="form-section d-none">
+            <h3><i class="fas fa-globe"></i> 步骤2: DNS记录配置</h3>
+            <p class="text-muted">请在您的域名DNS管理后台添加以下记录</p>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                请在您的域名DNS管理后台（如Cloudflare、阿里云DNS等）添加以下记录
+            </div>
+
+            <h5>必需的DNS记录：</h5>
+            
+            <div class="dns-record">
+                <strong>A 记录</strong><br>
+                名称: <code id="dns-a-name">mail</code><br>
+                值: <code id="dns-a-value">您的服务器IP</code>
+                <button class="btn btn-sm btn-outline-secondary copy-button" onclick="copyToClipboard('dns-a-value')">复制</button>
+            </div>
+
+            <div class="dns-record">
+                <strong>MX 记录</strong><br>
+                名称: <code>@</code><br>
+                值: <code id="dns-mx-value">10 mail.example.com</code>
+                <button class="btn btn-sm btn-outline-secondary copy-button" onclick="copyToClipboard('dns-mx-value')">复制</button>
+            </div>
+
+            <div class="dns-record">
+                <strong>TXT 记录 (SPF)</strong><br>
+                名称: <code>@</code><br>
+                值: <code>v=spf1 mx ~all</code>
+                <button class="btn btn-sm btn-outline-secondary copy-button" onclick="copyToClipboard(this.previousElementSibling)">复制</button>
+            </div>
+
+            <div class="dns-record">
+                <strong>TXT 记录 (DMARC)</strong><br>
+                名称: <code id="dns-dmarc-name">_dmarc</code><br>
+                值: <code id="dns-dmarc-value">v=DMARC1; p=none; rua=mailto:dmarc@example.com</code>
+                <button class="btn btn-sm btn-outline-secondary copy-button" onclick="copyToClipboard('dns-dmarc-value')">复制</button>
+            </div>
+
+            <div class="alert alert-warning">
+                <i class="fas fa-clock"></i>
+                DNS记录可能需要几分钟到几小时才能生效，请耐心等待
+            </div>
+
+            <button type="button" class="btn btn-secondary me-2" onclick="previousStep()">
+                <i class="fas fa-arrow-left"></i> 上一步
+            </button>
+            <button type="button" class="btn btn-primary" onclick="nextStep()">
+                下一步 <i class="fas fa-arrow-right"></i>
+            </button>
+        </div>
+
+        <!-- 步骤3: 系统初始化 -->
+        <div id="step3-content" class="form-section d-none">
+            <h3><i class="fas fa-server"></i> 步骤3: 系统初始化</h3>
+            <p class="text-muted">正在初始化邮件服务和生成DKIM密钥</p>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                系统将自动配置Postfix、Dovecot、Rspamd和OpenDKIM服务
+            </div>
+
+            <div id="init-progress" class="mb-3">
+                <div class="progress mb-3">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+                </div>
+                <div id="init-steps"></div>
+            </div>
+
+            <div id="init-buttons">
+                <button type="button" class="btn btn-secondary me-2" onclick="previousStep()">
+                    <i class="fas fa-arrow-left"></i> 上一步
+                </button>
+                <button type="button" class="btn btn-primary" id="init-system-btn" onclick="initializeSystem()">
+                    <i class="fas fa-play"></i> 开始初始化
+                </button>
+            </div>
+        </div>
+
+        <!-- 步骤4: DKIM配置 -->
+        <div id="step4-content" class="form-section d-none">
+            <h3><i class="fas fa-key"></i> 步骤4: DKIM记录配置</h3>
+            <p class="text-muted">请添加DKIM TXT记录以启用邮件签名认证</p>
+            
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i>
+                系统初始化完成！现在需要配置DKIM记录
+            </div>
+
+            <div id="dkim-record-section">
+                <h5>DKIM DNS记录：</h5>
+                <div class="dns-record">
+                    <strong>TXT 记录 (DKIM)</strong><br>
+                    名称: <code id="dkim-record-name">default._domainkey.example.com</code><br>
+                    值: <code id="dkim-record-value">正在获取...</code>
+                    <button class="btn btn-sm btn-outline-secondary copy-button" onclick="copyToClipboard('dkim-record-value')">复制</button>
+                </div>
+            </div>
+
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                请务必添加DKIM记录，否则发送的邮件可能被标记为垃圾邮件
+            </div>
+
+            <div class="text-center">
+                <button type="button" class="btn btn-success btn-lg" onclick="completeSetup()">
+                    <i class="fas fa-check"></i> 完成设置，进入管理界面
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let setupConfig = {};
+
+        document.addEventListener('DOMContentLoaded', function() {
+            checkSetupStatus();
+            
+            document.getElementById('basic-config-form').addEventListener('submit', handleBasicConfig);
+        });
+
+        async function checkSetupStatus() {
+            try {
+                const response = await fetch('/api/v1/setup/status');
+                const status = await response.json();
+                
+                if (status.is_setup) {
+                    window.location.href = '/';
+                    return;
+                }
+                
+                if (status.step > 1) {
+                    currentStep = status.step;
+                    setupConfig.domain = status.domain;
+                    setupConfig.admin_email = status.admin_email;
+                    setupConfig.hostname = status.hostname;
+                    showStep(currentStep);
+                }
+            } catch (error) {
+                console.error('检查设置状态失败:', error);
+            }
+        }
+
+        async function handleBasicConfig(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            setupConfig = Object.fromEntries(formData.entries());
+            
+            // 更新DNS记录显示
+            updateDNSRecords();
+            
+            nextStep();
+        }
+
+        function updateDNSRecords() {
+            document.getElementById('dns-a-name').textContent = 'mail';
+            document.getElementById('dns-mx-value').textContent = `10 ${setupConfig.hostname}`;
+            document.getElementById('dns-dmarc-name').textContent = '_dmarc';
+            document.getElementById('dns-dmarc-value').textContent = `v=DMARC1; p=none; rua=mailto:dmarc@${setupConfig.domain}`;
+        }
+
+        async function initializeSystem() {
+            const btn = document.getElementById('init-system-btn');
+            const progress = document.getElementById('init-progress');
+            const stepsDiv = document.getElementById('init-steps');
+            
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 初始化中...';
+            
+            try {
+                // 首先配置系统
+                const configResponse = await fetch('/api/v1/setup/configure', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(setupConfig)
+                });
+
+                if (!configResponse.ok) {
+                    throw new Error('系统配置失败');
+                }
+                
+                // 然后进行系统初始化
+                const initResponse = await fetch('/api/v1/system/init', { method: 'POST' });
+                const result = await initResponse.json();
+                
+                const progressBar = progress.querySelector('.progress-bar');
+                const totalSteps = result.steps.length;
+                
+                result.steps.forEach((step, index) => {
+                    const progressPercent = ((index + 1) / totalSteps) * 100;
+                    progressBar.style.width = progressPercent + '%';
+                    progressBar.textContent = Math.round(progressPercent) + '%';
+                    
+                    const stepDiv = document.createElement('div');
+                    stepDiv.className = `alert ${step.status === 'completed' ? 'alert-success' : step.status === 'failed' ? 'alert-danger' : 'alert-info'}`;
+                    stepDiv.innerHTML = `<strong>${step.description}</strong>: ${step.status === 'completed' ? '✓ 完成' : step.status === 'failed' ? '✗ 失败 - ' + step.error : '⏳ 进行中'}`;
+                    stepsDiv.appendChild(stepDiv);
+                });
+                
+                if (result.success) {
+                    progressBar.classList.remove('progress-bar-animated');
+                    progressBar.classList.add('bg-success');
+                    
+                    setTimeout(() => {
+                        nextStep();
+                        loadDKIMRecord();
+                    }, 2000);
+                } else {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-redo"></i> 重试初始化';
+                }
+            } catch (error) {
+                console.error('初始化失败:', error);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo"></i> 重试初始化';
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger';
+                errorDiv.innerHTML = `<strong>错误</strong>: ${error.message}`;
+                stepsDiv.appendChild(errorDiv);
+            }
+        }
+
+        async function loadDKIMRecord() {
+            try {
+                const response = await fetch(`/api/v1/setup/dkim?domain=${setupConfig.domain}`);
+                const data = await response.json();
+                
+                document.getElementById('dkim-record-name').textContent = data.record_name;
+                document.getElementById('dkim-record-value').textContent = data.record_value;
+            } catch (error) {
+                console.error('获取DKIM记录失败:', error);
+                document.getElementById('dkim-record-value').textContent = '获取失败，请稍后重试';
+            }
+        }
+
+        function nextStep() {
+            if (currentStep < 4) {
+                currentStep++;
+                showStep(currentStep);
+            }
+        }
+
+        function previousStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                showStep(currentStep);
+            }
+        }
+
+        function showStep(step) {
+            // 隐藏所有步骤内容
+            for (let i = 1; i <= 4; i++) {
+                document.getElementById(`step${i}-content`).classList.add('d-none');
+                const stepIndicator = document.getElementById(`step-${i}`);
+                stepIndicator.classList.remove('active', 'completed');
+                
+                if (i < step) {
+                    stepIndicator.classList.add('completed');
+                } else if (i === step) {
+                    stepIndicator.classList.add('active');
+                }
+            }
+            
+            // 显示当前步骤
+            document.getElementById(`step${step}-content`).classList.remove('d-none');
+        }
+
+        function completeSetup() {
+            window.location.href = '/';
+        }
+
+        function copyToClipboard(elementId) {
+            let text;
+            if (typeof elementId === 'string') {
+                text = document.getElementById(elementId).textContent;
+            } else {
+                text = elementId.textContent;
+            }
+            
+            navigator.clipboard.writeText(text).then(function() {
+                // 可以添加复制成功的提示
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '已复制!';
+                button.classList.add('btn-success');
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.classList.remove('btn-success');
+                    button.classList.add('btn-outline-secondary');
+                }, 2000);
+            });
+        }
+    </script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</body>
+</html>
