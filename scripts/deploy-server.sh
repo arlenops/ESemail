@@ -59,66 +59,134 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
 fi
 
 # 更新系统
-log_info "更新系统包..."
-apt-get update
-apt-get upgrade -y
+log_info "检查系统包更新..."
+if [ ! -f "/tmp/.esemail_apt_updated" ]; then
+    log_info "更新系统包..."
+    apt-get update && touch /tmp/.esemail_apt_updated
+    log_success "系统包列表更新完成"
+else
+    log_success "系统包列表已更新（跳过）"
+fi
+
+# 检查并升级系统（可选）
+log_info "检查系统升级（可跳过）..."
+read -p "是否升级系统软件包？这可能需要较长时间 [y/N]: " -t 10 -n 1 -r
+echo
+if [[ $REPLY =~ ^[Yy]$ ]]; then
+    apt-get upgrade -y
+    log_success "系统升级完成"
+else
+    log_info "跳过系统升级"
+fi
 
 # 安装基础依赖
-log_info "安装基础依赖..."
-apt-get install -y \
-    curl \
-    wget \
-    git \
-    build-essential \
-    supervisor \
-    ca-certificates \
-    gnupg2 \
-    software-properties-common \
-    apt-transport-https \
-    lsb-release \
-    ufw
+log_info "检查基础依赖..."
+missing_deps=()
+required_deps=("curl" "wget" "git" "build-essential" "supervisor" "ca-certificates" "gnupg2" "software-properties-common" "apt-transport-https" "lsb-release" "ufw")
 
-log_success "基础依赖安装完成"
+for dep in "${required_deps[@]}"; do
+    if ! dpkg -l | grep -q "^ii  $dep "; then
+        missing_deps+=("$dep")
+    fi
+done
+
+if [ ${#missing_deps[@]} -gt 0 ]; then
+    log_info "安装缺失的基础依赖: ${missing_deps[*]}"
+    apt-get install -y "${missing_deps[@]}" || {
+        log_error "基础依赖安装失败"
+        exit 1
+    }
+    log_success "基础依赖安装完成"
+else
+    log_success "基础依赖已安装（跳过）"
+fi
 
 # 安装Go
-log_info "安装Go编程语言..."
-GO_VERSION="1.21.6"
-wget -q https://golang.google.cn/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz
-rm -rf /usr/local/go
-tar -C /usr/local -xzf /tmp/go.tar.gz
-rm /tmp/go.tar.gz
-
-# 设置Go环境变量
-export PATH=$PATH:/usr/local/go/bin
-echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
-
-log_success "Go安装完成: $(/usr/local/go/bin/go version)"
+log_info "检查Go安装..."
+if command -v go >/dev/null 2>&1; then
+    CURRENT_GO_VERSION=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+\.[0-9]+')
+    REQUIRED_GO_VERSION="1.21.0"
+    
+    if [ "$(printf '%s\n' "$REQUIRED_GO_VERSION" "$CURRENT_GO_VERSION" | sort -V | head -n1)" = "$REQUIRED_GO_VERSION" ]; then
+        log_success "Go已安装且版本满足要求: $(go version)"
+    else
+        log_warning "Go版本过低: $CURRENT_GO_VERSION，需要升级到 >= $REQUIRED_GO_VERSION"
+    fi
+else
+    log_info "安装Go编程语言..."
+    GO_VERSION="1.21.6"
+    
+    # 检查是否已下载
+    if [ ! -f "/tmp/go.tar.gz" ]; then
+        wget -q https://golang.google.cn/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz || {
+            log_error "Go下载失败"
+            exit 1
+        }
+    fi
+    
+    # 安装Go
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf /tmp/go.tar.gz || {
+        log_error "Go解压失败"
+        exit 1
+    }
+    
+    # 设置Go环境变量
+    if ! grep -q "/usr/local/go/bin" /etc/profile; then
+        echo 'export PATH=$PATH:/usr/local/go/bin' >> /etc/profile
+    fi
+    
+    export PATH=$PATH:/usr/local/go/bin
+    rm -f /tmp/go.tar.gz
+    
+    log_success "Go安装完成: $(/usr/local/go/bin/go version)"
+fi
 
 # 安装邮件服务组件
-log_info "安装邮件服务组件..."
+log_info "检查邮件服务组件..."
 
-# 安装Postfix (预设为Internet Site)
-echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set-selections
-echo "postfix postfix/mailname string $(hostname -f)" | debconf-set-selections
-DEBIAN_FRONTEND=noninteractive apt-get install -y postfix
+# 检查需要安装的邮件组件
+mail_components=("postfix" "dovecot-core" "dovecot-imapd" "dovecot-pop3d" "dovecot-lmtpd" "rspamd" "opendkim" "opendkim-tools" "redis-server")
+missing_components=()
 
-# 安装其他邮件组件
-apt-get install -y \
-    dovecot-core \
-    dovecot-imapd \
-    dovecot-pop3d \
-    dovecot-lmtpd \
-    rspamd \
-    opendkim \
-    opendkim-tools \
-    redis-server
+for component in "${mail_components[@]}"; do
+    if ! dpkg -l | grep -q "^ii  $component "; then
+        missing_components+=("$component")
+    fi
+done
 
-log_success "邮件服务组件安装完成"
+if [ ${#missing_components[@]} -gt 0 ]; then
+    log_info "安装缺失的邮件组件: ${missing_components[*]}"
+    
+    # 如果需要安装Postfix，预设配置
+    if [[ " ${missing_components[*]} " =~ " postfix " ]]; then
+        echo "postfix postfix/main_mailer_type string 'Internet Site'" | debconf-set-selections
+        echo "postfix postfix/mailname string $(hostname -f)" | debconf-set-selections
+    fi
+    
+    # 安装缺失的组件
+    DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_components[@]}" || {
+        log_error "邮件服务组件安装失败"
+        exit 1
+    }
+    
+    log_success "邮件服务组件安装完成"
+else
+    log_success "邮件服务组件已安装（跳过）"
+fi
 
 # 安装acme.sh
-log_info "安装证书管理工具..."
-curl -s https://get.acme.sh | sh -s email=admin@$(hostname -f)
-log_success "acme.sh安装完成"
+log_info "检查证书管理工具..."
+if [ -d "/root/.acme.sh" ] && [ -f "/root/.acme.sh/acme.sh" ]; then
+    log_success "acme.sh已安装（跳过）"
+else
+    log_info "安装证书管理工具..."
+    curl -s https://get.acme.sh | sh -s email=admin@$(hostname -f) || {
+        log_error "acme.sh安装失败"
+        exit 1
+    }
+    log_success "acme.sh安装完成"
+fi
 
 # 创建系统用户
 log_info "创建系统用户..."
@@ -190,35 +258,46 @@ chmod 755 "$ESEMAIL_CONFIG" || { log_error "设置配置目录权限失败"; exi
 log_success "目录结构创建完成"
 
 # 下载并编译ESemail
-log_info "编译ESemail应用..."
-cd "$ESEMAIL_HOME"
+log_info "检查ESemail应用..."
 
-# 如果是从项目目录运行，复制源码
-if [[ -f "$(dirname "$0")/../go.mod" ]]; then
-    log_info "从本地项目复制源码..."
-    cp -r "$(dirname "$0")/.." "$ESEMAIL_HOME/src"
-    cd "$ESEMAIL_HOME/src"
+if [ -f "$ESEMAIL_HOME/esemail" ]; then
+    log_success "ESemail应用已编译（跳过）"
 else
-    # 否则从git克隆（这里需要你提供git地址）
-    log_warning "需要手动复制ESemail源码到 $ESEMAIL_HOME/src"
-    exit 1
+    log_info "编译ESemail应用..."
+    cd "$ESEMAIL_HOME"
+    
+    # 如果是从项目目录运行，复制源码
+    if [[ -f "$(dirname "$0")/../go.mod" ]]; then
+        log_info "从本地项目复制源码..."
+        cp -r "$(dirname "$0")/.." "$ESEMAIL_HOME/src"
+        cd "$ESEMAIL_HOME/src"
+    else
+        # 否则从git克隆（这里需要你提供git地址）
+        log_warning "需要手动复制ESemail源码到 $ESEMAIL_HOME/src"
+        exit 1
+    fi
+    
+    # 编译
+    export GOPROXY=https://goproxy.cn,direct
+    export GO111MODULE=on
+    /usr/local/go/bin/go mod tidy
+    /usr/local/go/bin/go build -o "$ESEMAIL_HOME/esemail" main.go
+    
+    chown "$ESEMAIL_USER:$ESEMAIL_USER" "$ESEMAIL_HOME/esemail"
+    chmod +x "$ESEMAIL_HOME/esemail"
+    
+    log_success "ESemail编译完成"
 fi
 
-# 编译
-export GOPROXY=https://goproxy.cn,direct
-export GO111MODULE=on
-/usr/local/go/bin/go mod tidy
-/usr/local/go/bin/go build -o "$ESEMAIL_HOME/esemail" main.go
-
-chown "$ESEMAIL_USER:$ESEMAIL_USER" "$ESEMAIL_HOME/esemail"
-chmod +x "$ESEMAIL_HOME/esemail"
-
-log_success "ESemail编译完成"
-
 # 创建配置文件
-log_info "创建配置文件..."
+log_info "检查配置文件..."
 
-cat > "$ESEMAIL_CONFIG/config.yaml" << EOF
+if [ -f "$ESEMAIL_CONFIG/config.yaml" ]; then
+    log_success "配置文件已存在（跳过）"
+else
+    log_info "创建配置文件..."
+    
+    cat > "$ESEMAIL_CONFIG/config.yaml" << EOF
 server:
   port: "8686"
   mode: "release"
@@ -236,10 +315,11 @@ cert:
   cert_path: "/etc/ssl/mail"
   auto_renew: true
 EOF
-
-chown "$ESEMAIL_USER:$ESEMAIL_USER" "$ESEMAIL_CONFIG/config.yaml"
-
-log_success "配置文件创建完成"
+    
+    chown "$ESEMAIL_USER:$ESEMAIL_USER" "$ESEMAIL_CONFIG/config.yaml"
+    
+    log_success "配置文件创建完成"
+fi
 
 # 配置基础的邮件服务
 log_info "配置邮件服务..."
@@ -298,9 +378,14 @@ else
 fi
 
 # 创建systemd服务
-log_info "创建systemd服务..."
+log_info "检查systemd服务..."
 
-cat > /etc/systemd/system/esemail.service << EOF
+if [ -f "/etc/systemd/system/esemail.service" ]; then
+    log_success "systemd服务已存在（跳过）"
+else
+    log_info "创建systemd服务..."
+    
+    cat > /etc/systemd/system/esemail.service << EOF
 [Unit]
 Description=ESemail Mail Server Control Panel
 After=network.target postgresql.service mysql.service redis.service
@@ -329,11 +414,12 @@ ReadWritePaths=$ESEMAIL_DATA $ESEMAIL_CONFIG /var/log/esemail
 [Install]
 WantedBy=multi-user.target
 EOF
-
-systemctl daemon-reload
-systemctl enable esemail
-
-log_success "systemd服务创建完成"
+    
+    systemctl daemon-reload
+    systemctl enable esemail
+    
+    log_success "systemd服务创建完成"
+fi
 
 # 配置防火墙
 log_info "配置防火墙..."
@@ -349,17 +435,30 @@ ufw allow 8686/tcp    # Web控制面
 log_success "防火墙配置完成"
 
 # 启动服务
-log_info "启动服务..."
+log_info "检查并启动服务..."
 
-# 启动基础服务
-systemctl restart redis-server
-systemctl restart rspamd
-systemctl restart opendkim
-systemctl restart postfix
-systemctl restart dovecot
+# 检查并启动基础服务
+base_services=("redis-server" "rspamd" "opendkim" "postfix" "dovecot")
+for service in "${base_services[@]}"; do
+    if systemctl is-active --quiet "$service"; then
+        log_success "$service 已运行（跳过）"
+    else
+        log_info "启动 $service..."
+        systemctl restart "$service" || {
+            log_warning "启动 $service 失败，但继续执行..."
+        }
+    fi
+done
 
-# 启动ESemail
-systemctl start esemail
+# 检查并启动ESemail
+if systemctl is-active --quiet "esemail"; then
+    log_success "esemail 已运行（跳过）"
+else
+    log_info "启动 esemail..."
+    systemctl start esemail || {
+        log_warning "启动 esemail 失败，但继续执行..."
+    }
+fi
 
 sleep 5
 
