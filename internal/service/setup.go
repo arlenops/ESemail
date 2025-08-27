@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 )
@@ -49,26 +50,38 @@ func (s *SetupService) GetSetupStatus() *SetupStatus {
 }
 
 func (s *SetupService) ConfigureSystem(config SetupConfig) error {
+	log.Printf("开始配置系统，域名: %s, 管理员: %s", config.Domain, config.AdminEmail)
+	
 	if s.IsSystemSetup() {
+		log.Printf("系统已经配置完成，跳过配置")
 		return fmt.Errorf("系统已经配置完成")
 	}
 
+	log.Printf("步骤1: 保存配置文件")
 	if err := s.saveSetupConfig(config); err != nil {
+		log.Printf("保存配置失败: %v", err)
 		return fmt.Errorf("保存配置失败: %v", err)
 	}
 
+	log.Printf("步骤2: 更新系统配置")
 	if err := s.updateSystemConfig(config); err != nil {
+		log.Printf("更新系统配置失败: %v", err)
 		return fmt.Errorf("更新系统配置失败: %v", err)
 	}
 
+	log.Printf("步骤3: 创建管理员用户")
 	if err := s.createAdminUser(config); err != nil {
+		log.Printf("创建管理员用户失败: %v", err)
 		return fmt.Errorf("创建管理员用户失败: %v", err)
 	}
 
+	log.Printf("步骤4: 标记系统配置完成")
 	if err := s.markSystemSetup(); err != nil {
+		log.Printf("标记系统配置完成失败: %v", err)
 		return fmt.Errorf("标记系统配置完成失败: %v", err)
 	}
 
+	log.Printf("系统配置完成")
 	return nil
 }
 
