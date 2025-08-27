@@ -266,8 +266,11 @@ else
     log_info "编译ESemail应用..."
     cd "$ESEMAIL_HOME"
     
-    # 如果是从项目目录运行，复制源码
-    if [[ -f "$(dirname "$0")/../go.mod" ]]; then
+    # 检查源码是否已存在
+    if [[ -f "$ESEMAIL_HOME/src/go.mod" ]]; then
+        log_info "源码已存在，直接编译..."
+        cd "$ESEMAIL_HOME/src"
+    elif [[ -f "$(dirname "$0")/../go.mod" ]]; then
         log_info "从本地项目复制源码..."
         cp -r "$(dirname "$0")/.." "$ESEMAIL_HOME/src"
         cd "$ESEMAIL_HOME/src"
