@@ -199,6 +199,8 @@ func (s *SetupService) updateDKIMConfig(domain string) error {
 }
 
 func (s *SetupService) createAdminUser(config SetupConfig) error {
+	log.Printf("开始创建管理员用户: %s", config.AdminEmail)
+	
 	userService := NewUserService()
 
 	_, err := userService.CreateUser(CreateUserRequest{
@@ -208,7 +210,13 @@ func (s *SetupService) createAdminUser(config SetupConfig) error {
 		Quota:    2 * 1024 * 1024 * 1024, // 2GB
 	})
 
-	return err
+	if err != nil {
+		log.Printf("创建管理员用户失败，详细错误: %v", err)
+		return err
+	}
+	
+	log.Printf("管理员用户创建成功: %s", config.AdminEmail)
+	return nil
 }
 
 func (s *SetupService) markSystemSetup() error {

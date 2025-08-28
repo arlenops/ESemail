@@ -125,15 +125,29 @@ func (s *UserService) generateUserID() string {
 }
 
 func (s *UserService) extractDomain(email string) string {
-	parts := []string{}
+	atIndex := -1
 	for i, char := range email {
 		if char == '@' && i < len(email)-1 {
-			parts = []string{email[:i], email[i+1:]}
+			atIndex = i
 			break
 		}
 	}
-	if len(parts) == 2 {
-		return parts[1]
+	if atIndex > 0 && atIndex < len(email)-1 {
+		return email[atIndex+1:]
+	}
+	return ""
+}
+
+func (s *UserService) extractLocalPart(email string) string {
+	atIndex := -1
+	for i, char := range email {
+		if char == '@' {
+			atIndex = i
+			break
+		}
+	}
+	if atIndex > 0 {
+		return email[:atIndex]
 	}
 	return ""
 }
@@ -149,7 +163,12 @@ func (s *UserService) generateRandomPassword(length int) string {
 }
 
 func (s *UserService) createSystemUser(user *User, hashedPassword string) error {
-	mailDir := fmt.Sprintf("/var/lib/esemail/mail/%s/%s", user.Domain, user.Email[:len(user.Email)-len(user.Domain)-1])
+	localPart := s.extractLocalPart(user.Email)
+	if localPart == "" {
+		return fmt.Errorf("无效的邮箱地址格式: %s", user.Email)
+	}
+	
+	mailDir := fmt.Sprintf("/var/lib/esemail/mail/%s/%s", user.Domain, localPart)
 
 	if err := os.MkdirAll(mailDir+"/Maildir", 0700); err != nil {
 		return fmt.Errorf("创建邮箱目录失败: %v", err)
