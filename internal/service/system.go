@@ -3,12 +3,13 @@ package service
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+	"time"
 )
 
-type SystemService struct{}
+type SystemService struct{
+	securityService *SecurityService
+}
 
 type SystemStatus struct {
 	Initialized      bool              `json:"initialized"`
@@ -33,7 +34,9 @@ type InitializationResult struct {
 }
 
 func NewSystemService() *SystemService {
-	return &SystemService{}
+	return &SystemService{
+		securityService: NewSecurityService(),
+	}
 }
 
 func (s *SystemService) GetSystemStatus() *SystemStatus {
@@ -48,6 +51,16 @@ func (s *SystemService) GetSystemStatus() *SystemStatus {
 }
 
 func (s *SystemService) InitializeSystem() *InitializationResult {
+	// 获取系统配置
+	setupService := NewSetupService()
+	setupData := setupService.LoadSetupData()
+	if setupData == nil {
+		return &InitializationResult{
+			Success: false,
+			Message: "系统尚未配置，请先完成基础配置",
+			Steps:   []InitializationStep{},
+		}
+	}
 	steps := []InitializationStep{
 		{Name: "check_packages", Description: "检查必需软件包", Status: "pending"},
 		{Name: "install_packages", Description: "安装缺失的软件包", Status: "pending"},
@@ -75,9 +88,9 @@ func (s *SystemService) InitializeSystem() *InitializationResult {
 		case "create_directories":
 			err = s.createDirectoriesStep()
 		case "generate_configs":
-			err = s.generateConfigsStep()
+			err = s.generateConfigsStep(setupData)
 		case "generate_dkim":
-			err = s.generateDKIMStep()
+			err = s.generateDKIMStep(setupData)
 		case "start_services":
 			err = s.startServicesStep()
 		case "verify_services":
@@ -131,12 +144,11 @@ func (s *SystemService) getServicesStatus() map[string]string {
 }
 
 func (s *SystemService) getServiceStatus(serviceName string) string {
-	cmd := exec.Command("systemctl", "is-active", serviceName)
-	output, err := cmd.Output()
+	status, err := s.securityService.CheckServiceStatusSecure(serviceName)
 	if err != nil {
 		return "unknown"
 	}
-	return strings.TrimSpace(string(output))
+	return status
 }
 
 func (s *SystemService) checkRequiredPackages() map[string]bool {
@@ -151,8 +163,8 @@ func (s *SystemService) checkRequiredPackages() map[string]bool {
 }
 
 func (s *SystemService) isPackageInstalled(packageName string) bool {
-	cmd := exec.Command("dpkg", "-l", packageName)
-	err := cmd.Run()
+	// 使用安全的命令执行
+	_, err := s.securityService.ExecuteSecureCommand("dpkg", []string{"-l", packageName}, 10*time.Second)
 	return err == nil
 }
 
@@ -174,25 +186,25 @@ func (s *SystemService) checkPackagesStep() error {
 func (s *SystemService) installPackagesStep() error {
 	packages := []string{"postfix", "dovecot-core", "dovecot-imapd", "dovecot-pop3d", "rspamd", "opendkim", "opendkim-tools"}
 
-	cmd := exec.Command("apt", "update")
-	if err := cmd.Run(); err != nil {
+	// 安全地更新包列表
+	_, err := s.securityService.ExecuteSecureCommand("apt", []string{"update"}, 60*time.Second)
+	if err != nil {
 		return fmt.Errorf("更新软件包列表失败: %v", err)
 	}
 
 	for _, pkg := range packages {
 		if !s.isPackageInstalled(pkg) {
-			cmd := exec.Command("apt", "install", "-y", pkg)
-			if err := cmd.Run(); err != nil {
+			_, err := s.securityService.ExecuteSecureCommand("apt", []string{"install", "-y", pkg}, 300*time.Second)
+			if err != nil {
 				return fmt.Errorf("安装 %s 失败: %v", pkg, err)
 			}
 		}
 	}
 
+	// acme.sh安装被禁用，因为使用curl下载脚本执行存在安全风险
+	// 建议在部署脚本中预先安装acme.sh
 	if !s.isAcmeShInstalled() {
-		cmd := exec.Command("sh", "-c", "curl https://get.acme.sh | sh")
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("安装 acme.sh 失败: %v", err)
-		}
+		return fmt.Errorf("acme.sh未安装，请在部署时预先安装")
 	}
 
 	return nil
@@ -218,13 +230,13 @@ func (s *SystemService) createDirectoriesStep() error {
 	return nil
 }
 
-func (s *SystemService) generateConfigsStep() error {
+func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
 	configs := map[string]string{
-		"/etc/postfix/main.cf":                    s.generatePostfixMainConfig(),
+		"/etc/postfix/main.cf":                    s.generatePostfixMainConfig(setupData),
 		"/etc/postfix/master.cf":                  s.generatePostfixMasterConfig(),
-		"/etc/dovecot/dovecot.conf":               s.generateDovecotConfig(),
+		"/etc/dovecot/dovecot.conf":               s.generateDovecotConfig(setupData),
 		"/etc/rspamd/local.d/milter_headers.conf": s.generateRspamdConfig(),
-		"/etc/opendkim.conf":                      s.generateOpenDKIMConfig(),
+		"/etc/opendkim.conf":                      s.generateOpenDKIMConfig(setupData),
 	}
 
 	for path, content := range configs {
@@ -241,23 +253,28 @@ func (s *SystemService) generateConfigsStep() error {
 	return nil
 }
 
-func (s *SystemService) generateDKIMStep() error {
+func (s *SystemService) generateDKIMStep(setupData *SetupConfig) error {
+	// 验证域名安全性
+	if err := s.securityService.ValidateDomain(setupData.Domain); err != nil {
+		return fmt.Errorf("域名验证失败: %v", err)
+	}
+
 	dkimDir := "/etc/opendkim/keys/default"
 	if err := os.MkdirAll(dkimDir, 0700); err != nil {
 		return fmt.Errorf("创建DKIM目录失败: %v", err)
 	}
 
-	cmd := exec.Command("opendkim-genkey", "-s", "default", "-d", "example.com", "-D", dkimDir)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("生成DKIM密钥失败: %v", err)
+	// 使用安全的DKIM密钥生成
+	if err := s.securityService.GenerateDKIMKeySecure(setupData.Domain); err != nil {
+		return err
 	}
 
-	keyTable := "default._domainkey.example.com example.com:default:/etc/opendkim/keys/default/default.private\n"
+	keyTable := fmt.Sprintf("default._domainkey.%s %s:default:/etc/opendkim/keys/default/default.private\n", setupData.Domain, setupData.Domain)
 	if err := os.WriteFile("/etc/opendkim/KeyTable", []byte(keyTable), 0644); err != nil {
 		return fmt.Errorf("创建KeyTable失败: %v", err)
 	}
 
-	signingTable := "*@example.com default._domainkey.example.com\n"
+	signingTable := fmt.Sprintf("*@%s default._domainkey.%s\n", setupData.Domain, setupData.Domain)
 	if err := os.WriteFile("/etc/opendkim/SigningTable", []byte(signingTable), 0644); err != nil {
 		return fmt.Errorf("创建SigningTable失败: %v", err)
 	}
@@ -269,12 +286,15 @@ func (s *SystemService) startServicesStep() error {
 	services := []string{"postfix", "dovecot", "rspamd", "opendkim"}
 
 	for _, service := range services {
-		cmd := exec.Command("systemctl", "enable", service)
-		cmd.Run()
+		// 启用服务
+		_, err := s.securityService.ExecuteSecureCommand("systemctl", []string{"enable", service}, 15*time.Second)
+		if err != nil {
+			return fmt.Errorf("启用服务 %s 失败: %v", service, err)
+		}
 
-		cmd = exec.Command("systemctl", "start", service)
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("启动服务 %s 失败: %v", service, err)
+		// 启动服务
+		if err := s.securityService.RestartServiceSecure(service); err != nil {
+			return err
 		}
 	}
 
@@ -293,9 +313,9 @@ func (s *SystemService) verifyServicesStep() error {
 	return nil
 }
 
-func (s *SystemService) generatePostfixMainConfig() string {
-	return `myhostname = mail.example.com
-mydomain = example.com
+func (s *SystemService) generatePostfixMainConfig(setupData *SetupConfig) string {
+	return fmt.Sprintf(`myhostname = %s
+mydomain = %s
 myorigin = $mydomain
 inet_interfaces = all
 inet_protocols = ipv4
@@ -312,8 +332,8 @@ append_dot_mydomain = no
 readme_directory = no
 compatibility_level = 2
 
-smtpd_tls_cert_file = /etc/ssl/mail/example.com/fullchain.pem
-smtpd_tls_key_file = /etc/ssl/mail/example.com/privkey.pem
+smtpd_tls_cert_file = /etc/ssl/mail/%s/fullchain.pem
+smtpd_tls_key_file = /etc/ssl/mail/%s/privkey.pem
 smtpd_use_tls = yes
 smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
@@ -333,7 +353,7 @@ virtual_mailbox_maps = hash:/etc/postfix/vmailbox
 virtual_mailbox_base = /var/lib/esemail/mail
 virtual_uid_maps = static:5000
 virtual_gid_maps = static:5000
-`
+`, setupData.Hostname, setupData.Domain, setupData.Domain, setupData.Domain)
 }
 
 func (s *SystemService) generatePostfixMasterConfig() string {
@@ -387,29 +407,29 @@ scache    unix  -       -       y       -       1       scache
 `
 }
 
-func (s *SystemService) generateDovecotConfig() string {
-	return `protocols = imap pop3
+func (s *SystemService) generateDovecotConfig(setupData *SetupConfig) string {
+	return fmt.Sprintf(`protocols = imap pop3
 listen = *, ::
 base_dir = /var/run/dovecot/
 instance_name = dovecot
 
 ssl = required
-ssl_cert = </etc/ssl/mail/example.com/fullchain.pem
-ssl_key = </etc/ssl/mail/example.com/privkey.pem
+ssl_cert = </etc/ssl/mail/%s/fullchain.pem
+ssl_key = </etc/ssl/mail/%s/privkey.pem
 ssl_protocols = !SSLv2 !SSLv3
 
-mail_location = maildir:/var/lib/esemail/mail/%d/%n/Maildir
+mail_location = maildir:/var/lib/esemail/mail/%%d/%%n/Maildir
 mail_uid = 5000
 mail_gid = 5000
 
 auth_mechanisms = plain login
 passdb {
   driver = passwd-file
-  args = scheme=CRYPT username_format=%u /etc/dovecot/users
+  args = scheme=CRYPT username_format=%%u /etc/dovecot/users
 }
 userdb {
   driver = static
-  args = uid=5000 gid=5000 home=/var/lib/esemail/mail/%d/%n
+  args = uid=5000 gid=5000 home=/var/lib/esemail/mail/%%d/%%n
 }
 
 service imap-login {
@@ -451,7 +471,7 @@ namespace inbox {
     special_use = \Trash
   }
 }
-`
+`, setupData.Domain, setupData.Domain)
 }
 
 func (s *SystemService) generateRspamdConfig() string {
@@ -460,10 +480,10 @@ use = ["authentication-results", "spam-header", "x-spamd-bar", "x-rspamd-server"
 `
 }
 
-func (s *SystemService) generateOpenDKIMConfig() string {
-	return `Syslog yes
+func (s *SystemService) generateOpenDKIMConfig(setupData *SetupConfig) string {
+	return fmt.Sprintf(`Syslog yes
 UMask 002
-Domain example.com
+Domain %s
 KeyFile /etc/opendkim/keys/default/default.private
 Selector default
 SOCKET inet:8891@localhost
@@ -474,5 +494,5 @@ SubDomains no
 InternalHosts 127.0.0.1
 OversignHeaders From
 TrustAnchorFile /usr/share/dns/root.key
-`
+`, setupData.Domain)
 }

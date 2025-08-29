@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESemail 登录</title>
+    <link href="/static/css/bootstrap.min.css" rel="stylesheet">
+    <link href="/static/css/dashboard.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        .login-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .login-card {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-header h1 {
+            color: #333;
+            margin-bottom: 0.5rem;
+        }
+        .login-header p {
+            color: #666;
+            margin: 0;
+        }
+        .form-floating {
+            margin-bottom: 1rem;
+        }
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border-radius: 5px;
+        }
+        .alert {
+            margin-bottom: 1rem;
+        }
+        .footer-text {
+            text-align: center;
+            margin-top: 2rem;
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <h1><i class="fas fa-envelope"></i> ESemail</h1>
+                <p>轻量化邮局管理系统</p>
+            </div>
+
+            <div id="alert-container"></div>
+
+            <form id="login-form">
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="username" name="username" placeholder="用户名" required>
+                    <label for="username">用户名</label>
+                </div>
+                <div class="form-floating">
+                    <input type="password" class="form-control" id="password" name="password" placeholder="密码" required>
+                    <label for="password">密码</label>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-login" id="login-btn">
+                        <i class="fas fa-sign-in-alt"></i> 登录
+                    </button>
+                </div>
+            </form>
+
+            <div class="footer-text">
+                <p>默认用户名: <strong>admin</strong></p>
+                <p>首次登录请查看控制台获取初始密码</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const alertContainer = document.getElementById('alert-container');
+        const loginForm = document.getElementById('login-form');
+        const loginBtn = document.getElementById('login-btn');
+
+        function showAlert(message, type = 'danger') {
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                loginBtn.disabled = true;
+                loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 登录中...';
+            } else {
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> 登录';
+            }
+        }
+
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(loginForm);
+            const loginData = {
+                username: formData.get('username'),
+                password: formData.get('password')
+            };
+
+            setLoading(true);
+
+            try {
+                const response = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(loginData)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // 保存token到localStorage
+                    localStorage.setItem('auth_token', result.token);
+                    localStorage.setItem('auth_user', JSON.stringify(result.user));
+                    
+                    showAlert('登录成功，正在跳转...', 'success');
+                    
+                    // 跳转到主页面
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showAlert(result.error || '登录失败');
+                }
+            } catch (error) {
+                console.error('登录请求失败:', error);
+                showAlert('网络错误，请稍后重试');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // 检查是否已经登录
+        document.addEventListener('DOMContentLoaded', function() {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                // 验证token是否有效
+                fetch('/api/v1/auth/me', {
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // 已登录，跳转到主页面
+                        window.location.href = '/';
+                    } else {
+                        // token无效，清除
+                        localStorage.removeItem('auth_token');
+                        localStorage.removeItem('auth_user');
+                    }
+                })
+                .catch(error => {
+                    console.error('验证token失败:', error);
+                });
+            }
+        });
+    </script>
+</body>
+</html>

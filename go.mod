@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/gin-gonic/gin v1.10.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	golang.org/x/crypto v0.25.0
 	gopkg.in/yaml.v2 v2.4.0
 )

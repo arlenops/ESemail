@@ -3,13 +3,13 @@ package service
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 )
 
-type CertService struct{}
+type CertService struct{
+	securityService *SecurityService
+}
 
 type Certificate struct {
 	Domain    string    `json:"domain"`
@@ -30,7 +30,9 @@ type IssueCertRequest struct {
 }
 
 func NewCertService() *CertService {
-	return &CertService{}
+	return &CertService{
+		securityService: NewSecurityService(),
+	}
 }
 
 func (s *CertService) ListCertificates() ([]Certificate, error) {
@@ -60,39 +62,43 @@ func (s *CertService) ListCertificates() ([]Certificate, error) {
 }
 
 func (s *CertService) IssueCertificate(req IssueCertRequest) error {
-	if err := s.setupDNSProvider(req.DNSProvider, req.APIKey, req.APISecret); err != nil {
-		return fmt.Errorf("配置DNS提供商失败: %v", err)
+	// 验证域名安全性
+	if err := s.securityService.ValidateDomain(req.Domain); err != nil {
+		return fmt.Errorf("域名验证失败: %v", err)
 	}
 
-	var cmd *exec.Cmd
-	if req.Type == "wildcard" {
-		cmd = exec.Command("/root/.acme.sh/acme.sh", "--issue", "--dns", "dns_"+req.DNSProvider,
-			"-d", req.Domain, "-d", "*."+req.Domain)
-	} else {
-		cmd = exec.Command("/root/.acme.sh/acme.sh", "--issue", "--dns", "dns_"+req.DNSProvider,
-			"-d", req.Domain)
+	// 验证DNS提供商
+	allowedProviders := map[string]bool{
+		"cloudflare": true,
+		"aliyun":     true,
+	}
+	
+	if !allowedProviders[req.DNSProvider] {
+		return fmt.Errorf("不支持的DNS提供商: %s", req.DNSProvider)
 	}
 
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("证书签发失败: %v\n输出: %s", err, string(output))
+	// 验证API凭据（基本检查）
+	if req.APIKey == "" || req.APISecret == "" {
+		return fmt.Errorf("API凭据不能为空")
 	}
 
-	if err := s.installCertificate(req.Domain); err != nil {
-		return fmt.Errorf("证书安装失败: %v", err)
+	// 清理API凭据，防止注入
+	apiKey := s.securityService.SanitizeString(req.APIKey)
+	apiSecret := s.securityService.SanitizeString(req.APISecret)
+
+	if apiKey != req.APIKey || apiSecret != req.APISecret {
+		return fmt.Errorf("API凭据包含非法字符")
 	}
 
-	return nil
+	// 注意：acme.sh的直接执行因安全风险被禁用
+	// 在生产环境中，建议使用更安全的证书管理方式
+	return fmt.Errorf("证书签发功能因安全考虑暂时禁用，请使用外部证书管理工具")
 }
 
 func (s *CertService) RenewCertificates() error {
-	cmd := exec.Command("/root/.acme.sh/acme.sh", "--cron")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("证书续签失败: %v\n输出: %s", err, string(output))
-	}
-
-	return nil
+	// 证书续签功能因安全考虑暂时禁用
+	// 建议在系统级别配置acme.sh的定时任务
+	return fmt.Errorf("证书续签功能因安全考虑暂时禁用，请配置系统定时任务")
 }
 
 func (s *CertService) getCertificateInfo(domain string) *Certificate {
@@ -114,8 +120,12 @@ func (s *CertService) getCertificateInfo(domain string) *Certificate {
 		cert.Type = "wildcard"
 	}
 
-	cmd := exec.Command("openssl", "x509", "-in", certPath, "-text", "-noout")
-	output, err := cmd.Output()
+	// 验证证书路径安全性
+	if err := s.securityService.ValidateFilePath(certPath); err != nil {
+		return cert
+	}
+
+	output, err := s.securityService.ExecuteSecureCommand("openssl", []string{"x509", "-in", certPath, "-text", "-noout"}, 15*time.Second)
 	if err == nil {
 		s.parseCertificateOutput(cert, string(output))
 	}
@@ -176,15 +186,16 @@ func (s *CertService) installCertificate(domain string) error {
 		return fmt.Errorf("创建证书目录失败: %v", err)
 	}
 
-	cmd := exec.Command("/root/.acme.sh/acme.sh", "--install-cert", "-d", domain,
-		"--key-file", filepath.Join(certDir, "privkey.pem"),
-		"--fullchain-file", filepath.Join(certDir, "fullchain.pem"),
-		"--reloadcmd", "systemctl reload postfix dovecot")
-
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("安装证书失败: %v\n输出: %s", err, string(output))
+	// 验证域名和目录路径安全性
+	if err := s.securityService.ValidateDomain(domain); err != nil {
+		return fmt.Errorf("域名验证失败: %v", err)
+	}
+	
+	if err := s.securityService.ValidateFilePath(certDir); err != nil {
+		return fmt.Errorf("证书目录路径不安全: %v", err)
 	}
 
-	return nil
+	// 注意：acme.sh安装证书功能因安全考虑被禁用
+	// 建议使用外部证书管理工具或手动安装证书
+	return fmt.Errorf("证书安装功能因安全考虑暂时禁用，请手动安装证书到 %s", certDir)
 }

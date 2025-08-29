@@ -2,11 +2,13 @@ package service
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
+	"time"
 )
 
-type DomainService struct{}
+type DomainService struct{
+	securityService *SecurityService
+}
 
 type Domain struct {
 	Name       string            `json:"name"`
@@ -25,7 +27,9 @@ type DNSRecord struct {
 }
 
 func NewDomainService() *DomainService {
-	return &DomainService{}
+	return &DomainService{
+		securityService: NewSecurityService(),
+	}
 }
 
 func (s *DomainService) ListDomains() ([]Domain, error) {
@@ -63,17 +67,22 @@ func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
 }
 
 func (s *DomainService) checkDNSRecord(recordType, domain string) string {
-	var cmd *exec.Cmd
+	// 验证域名安全性
+	if err := s.securityService.ValidateDomain(domain); err != nil {
+		return "error"
+	}
+	
+	var args []string
 	switch recordType {
 	case "MX":
-		cmd = exec.Command("dig", "+short", "MX", domain)
+		args = []string{"+short", "MX", domain}
 	case "TXT":
-		cmd = exec.Command("dig", "+short", "TXT", domain)
+		args = []string{"+short", "TXT", domain}
 	default:
 		return "unknown"
 	}
 
-	output, err := cmd.Output()
+	output, err := s.securityService.ExecuteSecureCommand("dig", args, 15*time.Second)
 	if err != nil {
 		return "error"
 	}

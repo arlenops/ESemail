@@ -37,7 +37,7 @@ func (s *SetupService) GetSetupStatus() *SetupStatus {
 		RequiredFields: []string{"domain", "admin_email", "hostname", "admin_name", "admin_pass"},
 	}
 
-	if setupData := s.loadSetupData(); setupData != nil {
+	if setupData := s.LoadSetupData(); setupData != nil {
 		status.Domain = setupData.Domain
 		status.AdminEmail = setupData.AdminEmail
 		status.Hostname = setupData.Hostname
@@ -90,7 +90,7 @@ func (s *SetupService) IsSystemSetup() bool {
 	return err == nil
 }
 
-func (s *SetupService) loadSetupData() *SetupConfig {
+func (s *SetupService) LoadSetupData() *SetupConfig {
 	data, err := os.ReadFile("/etc/esemail/setup.conf")
 	if err != nil {
 		return nil

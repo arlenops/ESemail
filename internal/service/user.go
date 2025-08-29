@@ -5,13 +5,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
-	"os/exec"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-type UserService struct{}
+type UserService struct{
+	securityService *SecurityService
+}
 
 type User struct {
 	ID        string    `json:"id"`
@@ -42,7 +43,9 @@ type UpdateUserRequest struct {
 }
 
 func NewUserService() *UserService {
-	return &UserService{}
+	return &UserService{
+		securityService: NewSecurityService(),
+	}
 }
 
 func (s *UserService) ListUsers() ([]User, error) {
@@ -163,12 +166,26 @@ func (s *UserService) generateRandomPassword(length int) string {
 }
 
 func (s *UserService) createSystemUser(user *User, hashedPassword string) error {
+	// 验证输入安全性
+	if err := s.securityService.ValidateEmail(user.Email); err != nil {
+		return fmt.Errorf("邮箱验证失败: %v", err)
+	}
+	
+	if err := s.securityService.ValidateDomain(user.Domain); err != nil {
+		return fmt.Errorf("域名验证失败: %v", err)
+	}
+
 	localPart := s.extractLocalPart(user.Email)
 	if localPart == "" {
 		return fmt.Errorf("无效的邮箱地址格式: %s", user.Email)
 	}
 	
 	mailDir := fmt.Sprintf("/var/lib/esemail/mail/%s/%s", user.Domain, localPart)
+
+	// 验证路径安全性
+	if err := s.securityService.ValidateFilePath(mailDir); err != nil {
+		return fmt.Errorf("邮箱目录路径不安全: %v", err)
+	}
 
 	if err := os.MkdirAll(mailDir+"/Maildir", 0700); err != nil {
 		return fmt.Errorf("创建邮箱目录失败: %v", err)
@@ -181,8 +198,9 @@ func (s *UserService) createSystemUser(user *User, hashedPassword string) error 
 		}
 	}
 
-	cmd := exec.Command("chown", "-R", "5000:5000", mailDir)
-	if err := cmd.Run(); err != nil {
+	// 安全地执行chown命令
+	_, err := s.securityService.ExecuteSecureCommand("chown", []string{"-R", "5000:5000", mailDir}, 30*time.Second)
+	if err != nil {
 		return fmt.Errorf("设置邮箱目录权限失败: %v", err)
 	}
 
