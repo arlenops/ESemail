@@ -80,6 +80,7 @@ func (s *SystemService) InitializeSystem() *InitializationResult {
 
 	for i := range steps {
 		steps[i].Status = "running"
+		log.Printf("开始执行步骤: %s - %s", steps[i].Name, steps[i].Description)
 
 		var err error
 		switch steps[i].Name {
@@ -100,12 +101,14 @@ func (s *SystemService) InitializeSystem() *InitializationResult {
 		}
 
 		if err != nil {
+			log.Printf("步骤 %s 执行失败: %v", steps[i].Name, err)
 			steps[i].Status = "failed"
 			steps[i].Error = err.Error()
 			result.Success = false
 			result.Message = fmt.Sprintf("初始化失败: %s", err.Error())
 			break
 		} else {
+			log.Printf("步骤 %s 执行成功", steps[i].Name)
 			steps[i].Status = "completed"
 		}
 	}
@@ -397,16 +400,14 @@ func (s *SystemService) startServicesStep() error {
 	// 启动每个服务
 	for _, service := range services {
 		log.Printf("启动服务: %s", service)
-		cmd := exec.Command("systemctl", "start", service)
-		if err := cmd.Run(); err != nil {
+		if _, err := s.securityService.ExecuteSecureCommand("systemctl", []string{"start", service}, 30*time.Second); err != nil {
 			log.Printf("启动服务 %s 失败: %v", service, err)
 			failedServices = append(failedServices, service)
 			continue
 		}
 		
 		// 启用服务自启动
-		cmd = exec.Command("systemctl", "enable", service)
-		if err := cmd.Run(); err != nil {
+		if _, err := s.securityService.ExecuteSecureCommand("systemctl", []string{"enable", service}, 10*time.Second); err != nil {
 			log.Printf("启用服务 %s 自启动失败: %v", service, err)
 		}
 	}
@@ -415,7 +416,9 @@ func (s *SystemService) startServicesStep() error {
 	log.Printf("提示: 请手动配置防火墙开放必要端口 (22, 25, 80, 110, 143, 465, 587, 993, 995, 8686)")
 	
 	if len(failedServices) > 0 {
-		return fmt.Errorf("以下服务启动失败: %v", failedServices)
+		log.Printf("警告: 以下服务启动失败: %v", failedServices)
+		log.Printf("请检查服务配置并手动启动失败的服务")
+		// 不返回错误，允许初始化过程继续
 	}
 	
 	log.Printf("所有邮件系统服务启动完成")
