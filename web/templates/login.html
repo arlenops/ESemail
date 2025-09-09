@@ -4,62 +4,156 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ESemail 登录</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
-    <link href="/static/css/dashboard.css" rel="stylesheet">
+    <link href="/static/css/modern-theme.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--gradient-primary);
+            min-height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
         .login-container {
             min-height: 100vh;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 2rem 1rem;
         }
         .login-card {
             background: white;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            padding: 2.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-lg);
             width: 100%;
-            max-width: 400px;
+            max-width: 420px;
+            position: relative;
+            overflow: hidden;
+        }
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: var(--gradient-primary);
         }
         .login-header {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 2.5rem;
+        }
+        .login-header .logo {
+            width: 64px;
+            height: 64px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            margin: 0 auto 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+            box-shadow: var(--shadow-md);
         }
         .login-header h1 {
-            color: #333;
+            color: var(--text-color);
+            font-weight: 700;
+            font-size: 1.75rem;
             margin-bottom: 0.5rem;
         }
         .login-header p {
-            color: #666;
+            color: var(--dark-gray);
             margin: 0;
+            font-size: 0.95rem;
         }
         .form-floating {
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .form-floating .form-control {
+            border: 2px solid var(--medium-gray);
+            border-radius: var(--border-radius);
+            font-size: 0.95rem;
+            padding: 0.875rem 1rem;
+            height: auto;
+            transition: all 0.3s ease;
+        }
+        .form-floating .form-control:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+        }
+        .form-floating label {
+            font-weight: 500;
+            color: var(--dark-gray);
         }
         .btn-login {
             width: 100%;
-            padding: 12px;
-            font-size: 16px;
-            border-radius: 5px;
+            padding: 0.875rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: var(--border-radius);
+            background: var(--gradient-primary);
+            border: none;
+            color: white;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        .btn-login:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-md);
+        }
+        .btn-login:disabled {
+            opacity: 0.7;
+            transform: none;
         }
         .alert {
-            margin-bottom: 1rem;
+            margin-bottom: 1.5rem;
+            border: none;
+            border-radius: var(--border-radius);
+            font-weight: 500;
         }
         .footer-text {
             text-align: center;
             margin-top: 2rem;
-            color: #666;
-            font-size: 14px;
+            padding-top: 2rem;
+            border-top: 1px solid var(--medium-gray);
+        }
+        .footer-text p {
+            color: var(--dark-gray);
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+        }
+        .footer-text strong {
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+        .fade-in-up {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
     </style>
 </head>
 <body>
     <div class="login-container">
-        <div class="login-card">
+        <div class="login-card fade-in-up">
             <div class="login-header">
-                <h1><i class="fas fa-envelope"></i> ESemail</h1>
+                <div class="logo">
+                    <i class="fas fa-envelope"></i>
+                </div>
+                <h1>ESemail</h1>
                 <p>轻量化邮局管理系统</p>
             </div>
 
@@ -68,15 +162,15 @@
             <form id="login-form">
                 <div class="form-floating">
                     <input type="text" class="form-control" id="username" name="username" placeholder="用户名" required>
-                    <label for="username">用户名</label>
+                    <label for="username"><i class="fas fa-user me-2"></i>用户名</label>
                 </div>
                 <div class="form-floating">
                     <input type="password" class="form-control" id="password" name="password" placeholder="密码" required>
-                    <label for="password">密码</label>
+                    <label for="password"><i class="fas fa-lock me-2"></i>密码</label>
                 </div>
                 <div class="d-grid">
-                    <button type="submit" class="btn btn-primary btn-login" id="login-btn">
-                        <i class="fas fa-sign-in-alt"></i> 登录
+                    <button type="submit" class="btn btn-login" id="login-btn">
+                        <i class="fas fa-sign-in-alt me-2"></i>登录
                     </button>
                 </div>
             </form>

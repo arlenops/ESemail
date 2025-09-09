@@ -19,6 +19,7 @@ type User struct {
 	Email     string    `json:"email"`
 	Name      string    `json:"name"`
 	Domain    string    `json:"domain"`
+	Password  string    `json:"password"` // bcrypt加密后的密码
 	Active    bool      `json:"active"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -85,6 +86,8 @@ func (s *UserService) CreateUser(req CreateUserRequest) (*User, error) {
 		UsedQuota: 0,
 	}
 
+	user.Password = string(hashedPassword)
+	
 	if err := s.createSystemUser(user, string(hashedPassword)); err != nil {
 		return nil, fmt.Errorf("创建系统用户失败: %v", err)
 	}
@@ -208,5 +211,102 @@ func (s *UserService) createSystemUser(user *User, hashedPassword string) error 
 		return fmt.Errorf("写入用户文件失败: %v", err)
 	}
 
+	return nil
+}
+
+// AuthenticateUser 验证用户认证
+func (s *UserService) AuthenticateUser(email, password string) (*User, error) {
+	// 这里应该从存储中获取用户信息
+	// 暂时使用模拟数据
+	users := []User{
+		{
+			ID:        "1",
+			Email:     "admin@example.com",
+			Name:      "Administrator",
+			Domain:    "example.com",
+			Password:  "$2a$10$N9qo8uLOickgx2ZMRZoMye.j/qVh9hCQT5fYPrz2nVtWX7b7X5ziq", // "password"的bcrypt哈希
+			Active:    true,
+			CreatedAt: time.Now().AddDate(0, -1, 0),
+			UpdatedAt: time.Now(),
+			Aliases:   []string{"postmaster@example.com"},
+			Quota:     1024 * 1024 * 1024,
+			UsedQuota: 50 * 1024 * 1024,
+		},
+	}
+	
+	// 查找用户
+	var user *User
+	for i := range users {
+		if users[i].Email == email {
+			user = &users[i]
+			break
+		}
+		
+		// 检查别名
+		for _, alias := range users[i].Aliases {
+			if alias == email {
+				user = &users[i]
+				break
+			}
+		}
+		if user != nil {
+			break
+		}
+	}
+	
+	if user == nil {
+		return nil, fmt.Errorf("用户不存在: %s", email)
+	}
+	
+	// 验证密码
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		return nil, fmt.Errorf("密码错误")
+	}
+	
+	return user, nil
+}
+
+// GetUserByEmail 根据邮箱获取用户
+func (s *UserService) GetUserByEmail(email string) (*User, error) {
+	// 这里应该从存储中获取用户信息
+	// 暂时使用模拟数据
+	users := []User{
+		{
+			ID:        "1",
+			Email:     "admin@example.com",
+			Name:      "Administrator",
+			Domain:    "example.com",
+			Password:  "$2a$10$N9qo8uLOickgx2ZMRZoMye.j/qVh9hCQT5fYPrz2nVtWX7b7X5ziq",
+			Active:    true,
+			CreatedAt: time.Now().AddDate(0, -1, 0),
+			UpdatedAt: time.Now(),
+			Aliases:   []string{"postmaster@example.com"},
+			Quota:     1024 * 1024 * 1024,
+			UsedQuota: 50 * 1024 * 1024,
+		},
+	}
+	
+	// 查找用户
+	for i := range users {
+		if users[i].Email == email {
+			return &users[i], nil
+		}
+		
+		// 检查别名
+		for _, alias := range users[i].Aliases {
+			if alias == email {
+				return &users[i], nil
+			}
+		}
+	}
+	
+	return nil, fmt.Errorf("用户不存在: %s", email)
+}
+
+// SaveUser 保存用户信息（用于内部调用）
+func (s *UserService) SaveUser(userID string, user *User) error {
+	// 这里应该更新存储中的用户信息
+	// 暂时只是模拟实现
+	user.UpdatedAt = time.Now()
 	return nil
 }

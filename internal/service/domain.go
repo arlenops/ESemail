@@ -8,6 +8,7 @@ import (
 
 type DomainService struct{
 	securityService *SecurityService
+	dnsService     *DNSService
 }
 
 type Domain struct {
@@ -18,18 +19,27 @@ type Domain struct {
 	Status     string            `json:"status"`
 }
 
-type DNSRecord struct {
-	Type     string `json:"type"`
-	Name     string `json:"name"`
-	Value    string `json:"value"`
-	Status   string `json:"status"`
-	Required bool   `json:"required"`
-}
-
 func NewDomainService() *DomainService {
 	return &DomainService{
 		securityService: NewSecurityService(),
+		dnsService:     NewDNSService(),
 	}
+}
+
+// IsDomainManaged 检查域名是否被管理
+func (s *DomainService) IsDomainManaged(domain string) bool {
+	// 这里应该从存储中检查域名
+	// 暂时使用硬编码的域名列表
+	managedDomains := []string{"example.com", "test.com", "localhost"}
+	
+	domain = strings.ToLower(domain)
+	for _, managedDomain := range managedDomains {
+		if domain == managedDomain {
+			return true
+		}
+	}
+	
+	return false
 }
 
 func (s *DomainService) ListDomains() ([]Domain, error) {
@@ -57,13 +67,12 @@ func (s *DomainService) DeleteDomain(domain string) error {
 }
 
 func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
-	records := []DNSRecord{
-		{Type: "MX", Name: domain, Value: fmt.Sprintf("10 mail.%s", domain), Required: true, Status: s.checkDNSRecord("MX", domain)},
-		{Type: "TXT", Name: domain, Value: "v=spf1 mx ~all", Required: true, Status: s.checkDNSRecord("TXT", domain)},
-		{Type: "TXT", Name: fmt.Sprintf("_dmarc.%s", domain), Value: fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc@%s", domain), Required: true, Status: s.checkDNSRecord("TXT", fmt.Sprintf("_dmarc.%s", domain))},
-		{Type: "TXT", Name: fmt.Sprintf("default._domainkey.%s", domain), Value: s.getDKIMRecord(domain), Required: true, Status: s.checkDNSRecord("TXT", fmt.Sprintf("default._domainkey.%s", domain))},
-	}
-	return records, nil
+	// 使用DNS服务生成标准记录
+	serverIP := "127.0.0.1" // TODO: 从配置获取
+	mailServer := fmt.Sprintf("mail.%s", domain)
+	
+	status := s.dnsService.CheckDomainDNS(domain, serverIP, mailServer)
+	return status.Records, nil
 }
 
 func (s *DomainService) checkDNSRecord(recordType, domain string) string {

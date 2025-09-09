@@ -86,6 +86,7 @@
             <div class="step" id="step-2">2</div>
             <div class="step" id="step-3">3</div>
             <div class="step" id="step-4">4</div>
+            <div class="step" id="step-5">5</div>
         </div>
 
         <!-- 步骤1: 基础配置 -->
@@ -137,9 +138,84 @@
             </form>
         </div>
 
-        <!-- 步骤2: DNS配置指引 -->
+        <!-- 步骤2: 环境检查 -->
         <div id="step2-content" class="form-section d-none">
-            <h3><i class="fas fa-globe"></i> 步骤2: DNS记录配置</h3>
+            <h3><i class="fas fa-check-circle"></i> 步骤2: 环境检查</h3>
+            <p class="text-muted">检查系统是否具备运行邮局所需的依赖包</p>
+            
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                系统将检查 Postfix、Dovecot、Rspamd、OpenDKIM 等必需的服务组件
+            </div>
+
+            <div id="environment-status" class="mb-4">
+                <div class="text-center">
+                    <button type="button" class="btn btn-primary" id="check-env-btn" onclick="checkEnvironment()">
+                        <i class="fas fa-search"></i> 开始环境检查
+                    </button>
+                </div>
+            </div>
+
+            <div id="environment-results" class="d-none">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">系统信息</h6>
+                            </div>
+                            <div class="card-body" id="system-info">
+                                <!-- 系统信息将在这里显示 -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">检查摘要</h6>
+                            </div>
+                            <div class="card-body" id="env-summary">
+                                <!-- 环境检查摘要 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h5>服务依赖状态</h5>
+                    <div id="dependencies-list">
+                        <!-- 依赖项列表将在这里显示 -->
+                    </div>
+                </div>
+
+                <div id="install-missing" class="mt-4 d-none">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        检测到缺失的必需服务。您可以下载安装脚本手动安装，或点击下方按钮自动安装。
+                    </div>
+                    <div class="text-center">
+                        <a href="/api/v1/environment/install-script" class="btn btn-outline-primary me-2">
+                            <i class="fas fa-download"></i> 下载安装脚本
+                        </a>
+                        <button type="button" class="btn btn-warning" onclick="showInstallWarning()">
+                            <i class="fas fa-exclamation-triangle"></i> 注意：需要root权限安装
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <button type="button" class="btn btn-secondary me-2" onclick="previousStep()">
+                    <i class="fas fa-arrow-left"></i> 上一步
+                </button>
+                <button type="button" class="btn btn-primary" id="env-next-btn" onclick="nextStep()" disabled>
+                    下一步 <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- 步骤3: DNS配置指引 -->
+        <div id="step3-content" class="form-section d-none">
+            <h3><i class="fas fa-globe"></i> 步骤3: DNS记录配置</h3>
             <p class="text-muted">请在您的域名DNS管理后台添加以下记录</p>
             
             <div class="alert alert-info">
@@ -190,9 +266,9 @@
             </button>
         </div>
 
-        <!-- 步骤3: 系统初始化 -->
-        <div id="step3-content" class="form-section d-none">
-            <h3><i class="fas fa-server"></i> 步骤3: 系统初始化</h3>
+        <!-- 步骤4: 系统初始化 -->
+        <div id="step4-content" class="form-section d-none">
+            <h3><i class="fas fa-server"></i> 步骤4: 系统初始化</h3>
             <p class="text-muted">正在初始化邮件服务和生成DKIM密钥</p>
             
             <div class="alert alert-info">
@@ -217,9 +293,9 @@
             </div>
         </div>
 
-        <!-- 步骤4: DKIM配置 -->
-        <div id="step4-content" class="form-section d-none">
-            <h3><i class="fas fa-key"></i> 步骤4: DKIM记录配置</h3>
+        <!-- 步骤5: DKIM配置 -->
+        <div id="step5-content" class="form-section d-none">
+            <h3><i class="fas fa-key"></i> 步骤5: DKIM记录配置</h3>
             <p class="text-muted">请添加DKIM TXT记录以启用邮件签名认证</p>
             
             <div class="alert alert-success">
@@ -377,7 +453,7 @@
         }
 
         function nextStep() {
-            if (currentStep < 4) {
+            if (currentStep < 5) {
                 currentStep++;
                 showStep(currentStep);
             }
@@ -392,7 +468,7 @@
 
         function showStep(step) {
             // 隐藏所有步骤内容
-            for (let i = 1; i <= 4; i++) {
+            for (let i = 1; i <= 5; i++) {
                 document.getElementById(`step${i}-content`).classList.add('d-none');
                 const stepIndicator = document.getElementById(`step-${i}`);
                 stepIndicator.classList.remove('active', 'completed');
@@ -406,6 +482,88 @@
             
             // 显示当前步骤
             document.getElementById(`step${step}-content`).classList.remove('d-none');
+        }
+
+        async function checkEnvironment() {
+            const btn = document.getElementById('check-env-btn');
+            const resultsDiv = document.getElementById('environment-results');
+            const nextBtn = document.getElementById('env-next-btn');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 检查中...';
+
+            try {
+                const response = await fetch('/api/v1/environment/check');
+                const data = await response.json();
+
+                // 显示系统信息
+                const systemInfoDiv = document.getElementById('system-info');
+                systemInfoDiv.innerHTML = `
+                    <p><strong>操作系统:</strong> ${data.system_info.os} ${data.system_info.architecture}</p>
+                    <p><strong>内核:</strong> ${data.system_info.kernel}</p>
+                    <p><strong>内存:</strong> ${data.system_info.memory}</p>
+                    <p><strong>磁盘空间:</strong> ${data.system_info.disk_space}</p>
+                    <p><strong>Root权限:</strong> ${data.system_info.has_root ? '✓ 有' : '✗ 无'}</p>
+                `;
+
+                // 显示检查摘要
+                const summaryDiv = document.getElementById('env-summary');
+                summaryDiv.innerHTML = `
+                    <p><strong>总服务数:</strong> ${data.summary.total_services}</p>
+                    <p><strong>已安装:</strong> <span class="text-success">${data.summary.installed_services}</span></p>
+                    <p><strong>缺失服务:</strong> <span class="text-danger">${data.summary.missing_services}</span></p>
+                    <p><strong>缺失必需:</strong> <span class="text-warning">${data.summary.required_missing}</span></p>
+                    <div class="mt-2">
+                        <div class="badge ${data.ready ? 'bg-success' : 'bg-danger'}">${data.ready ? '系统就绪' : '需要安装依赖'}</div>
+                    </div>
+                `;
+
+                // 显示依赖项列表
+                const depsList = document.getElementById('dependencies-list');
+                depsList.innerHTML = '';
+                
+                data.dependencies.forEach(dep => {
+                    const statusClass = dep.status === 'installed' ? 'success' : dep.status === 'missing' ? 'danger' : 'warning';
+                    const statusIcon = dep.status === 'installed' ? '✓' : dep.status === 'missing' ? '✗' : '⚠';
+                    
+                    const depDiv = document.createElement('div');
+                    depDiv.className = `alert alert-${statusClass}`;
+                    depDiv.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>${statusIcon} ${dep.name}</strong> ${dep.required ? '<span class="badge bg-warning">必需</span>' : '<span class="badge bg-secondary">可选</span>'}
+                                <br><small class="text-muted">${dep.description}</small>
+                                <br><small><strong>版本:</strong> ${dep.version}</small>
+                            </div>
+                        </div>
+                    `;
+                    depsList.appendChild(depDiv);
+                });
+
+                resultsDiv.classList.remove('d-none');
+
+                if (!data.ready) {
+                    document.getElementById('install-missing').classList.remove('d-none');
+                } else {
+                    nextBtn.disabled = false;
+                }
+
+                btn.innerHTML = '<i class="fas fa-check"></i> 检查完成';
+
+            } catch (error) {
+                console.error('环境检查失败:', error);
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-redo"></i> 重新检查';
+                
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger';
+                errorDiv.innerHTML = `<strong>错误:</strong> ${error.message}`;
+                document.getElementById('environment-results').appendChild(errorDiv);
+            }
+        }
+
+        function showInstallWarning() {
+            alert('注意：自动安装依赖包需要root权限。建议您下载安装脚本并在具有root权限的环境中运行。\n\n如果您已经安装了所需的依赖包，可以点击"重新检查"按钮。');
         }
 
         function completeSetup() {

@@ -31,21 +31,51 @@ func main() {
 	systemService := service.NewSystemService()
 	domainService := service.NewDomainService()
 	userService := service.NewUserService()
-	mailService := service.NewMailService()
 	certService := service.NewCertService()
 	setupService := service.NewSetupService()
-
+	environmentService := service.NewEnvironmentService()
+	dnsService := service.NewDNSService()
+	
+	// 初始化邮件服务器
+	mailServerConfig := &service.MailServerConfig{
+		Domain:         "localhost", // 默认域名，应该从配置中获取
+		DataDir:        "./data",
+		SMTPPort:       "2525",  // 非特权端口
+		SMTPSPort:      "4465",  // 非特权端口
+		IMAPPort:       "1143",  // 非特权端口 
+		IMAPSPort:      "9993",  // 非特权端口
+		MaxMessageSize: 25 * 1024 * 1024, // 25MB
+		MaxRecipients:  100,
+		TLSCertFile:    "./certs/server.crt",
+		TLSKeyFile:     "./certs/server.key",
+		EnableTLS:      false, // 初始时禁用TLS，避免证书问题
+	}
+	
+	mailServer, err := service.NewMailServer(mailServerConfig, userService, domainService)
+	if err != nil {
+		log.Fatalf("创建邮件服务器失败: %v", err)
+	}
+	
+	// 启动邮件服务器
+	if err := mailServer.Start(); err != nil {
+		log.Printf("启动邮件服务器失败: %v", err)
+	} else {
+		log.Println("邮件服务器启动成功")
+	}
+	
 	router := api.SetupRouter(
 		cfg, 
 		healthService, 
 		systemService, 
 		domainService, 
 		userService, 
-		mailService, 
+		mailServer, 
 		certService, 
 		setupService, 
 		authService,
 		validationService,
+		environmentService,
+		dnsService,
 	)
 
 	log.Printf("ESemail 控制面启动在端口 :%s", cfg.Server.Port)

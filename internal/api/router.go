@@ -47,11 +47,13 @@ func SetupRouter(
 	systemService *service.SystemService,
 	domainService *service.DomainService,
 	userService *service.UserService,
-	mailService *service.MailService,
+	mailServer *service.MailServer,
 	certService *service.CertService,
 	setupService *service.SetupService,
 	authService *service.AuthService,
 	validationService *service.ValidationService,
+	environmentService *service.EnvironmentService,
+	dnsService *service.DNSService,
 ) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -139,6 +141,24 @@ func SetupRouter(
 			system.POST("/init", NewSystemHandler(systemService).InitializeSystem)
 		}
 
+		// 环境检查（无需认证）
+		environment := api.Group("/environment")
+		{
+			environmentHandler := NewEnvironmentHandler(environmentService)
+			environment.GET("/check", environmentHandler.CheckEnvironment)
+			environment.GET("/status", environmentHandler.GetEnvironmentStatus)
+			environment.GET("/install-script", environmentHandler.GetInstallScript)
+		}
+
+		// DNS检查（无需认证）
+		dns := api.Group("/dns")
+		{
+			dnsHandler := NewDNSHandler(dnsService)
+			dns.POST("/check", dnsHandler.CheckDomainDNS)
+			dns.GET("/setup-guide", dnsHandler.GetDNSSetupGuide)
+			dns.GET("/query", dnsHandler.QueryDNSRecord)
+		}
+
 		// 需要认证的接口组
 		authenticated := api.Group("/")
 		authenticated.Use(AuthMiddleware(authService))
@@ -169,12 +189,17 @@ func SetupRouter(
 				users.POST("/:id/reset-password", NewUserHandler(userService).ResetPassword)
 			}
 
-			// 邮件历史
+			// 邮件服务和历史
 			mail := authenticated.Group("/mail")
 			{
-				mail.GET("/history", NewMailHandler(mailService).GetMailHistory)
-				mail.GET("/history/:id", NewMailHandler(mailService).GetMailDetail)
-				mail.GET("/history/:id/download", NewMailHandler(mailService).DownloadEML)
+				mailServerHandler := NewMailServerHandler(mailServer)
+				mail.GET("/status", mailServerHandler.GetMailServerStatus)
+				mail.POST("/send", mailServerHandler.SendEmail)
+				mail.GET("/history", mailServerHandler.GetMailHistory)
+				mail.GET("/history/:id", mailServerHandler.GetMailDetail)
+				mail.GET("/history/:id/download", mailServerHandler.DownloadEML)
+				mail.GET("/user-messages", mailServerHandler.GetUserMessages)
+				mail.GET("/search", mailServerHandler.SearchMessages)
 			}
 
 			// 证书管理
