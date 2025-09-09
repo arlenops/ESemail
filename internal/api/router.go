@@ -98,8 +98,13 @@ func SetupRouter(
 			return
 		}
 
+		// 检查系统是否已初始化
+		initStatus := systemService.GetInitializationStatus()
+		
 		c.HTML(http.StatusOK, "dashboard.html", gin.H{
-			"title": "ESemail 邮局管理面板",
+			"title":           "ESemail 邮局管理面板",
+			"is_initialized":  initStatus["is_initialized"],
+			"init_status":     initStatus,
 		})
 	})
 
@@ -138,6 +143,7 @@ func SetupRouter(
 		system := api.Group("/system")
 		{
 			system.GET("/status", NewSystemHandler(systemService).GetSystemStatus)
+			system.GET("/init-status", NewSystemHandler(systemService).GetInitializationStatus)
 			system.POST("/init", NewSystemHandler(systemService).InitializeSystem)
 		}
 

@@ -32,3 +32,8 @@ func (h *SystemHandler) InitializeSystem(c *gin.Context) {
 
 	c.JSON(statusCode, result)
 }
+
+func (h *SystemHandler) GetInitializationStatus(c *gin.Context) {
+	status := h.systemService.GetInitializationStatus()
+	c.JSON(http.StatusOK, status)
+}

@@ -67,8 +67,8 @@ func (s *AuthService) createDefaultAdmin() error {
 		}
 	}
 	
-	// 生成默认密码
-	defaultPassword := s.generateRandomPassword()
+	// 设置默认密码为admin
+	defaultPassword := "admin"
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(defaultPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("生成密码哈希失败: %v", err)

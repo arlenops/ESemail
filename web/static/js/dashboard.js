@@ -68,10 +68,11 @@ async function checkSystemStatus() {
             return;
         }
         
-        const systemResponse = await fetch('/api/v1/system/status');
-        const systemStatus = await systemResponse.json();
+        // 检查系统初始化状态
+        const initResponse = await fetch('/api/v1/system/init-status');
+        const initStatus = await initResponse.json();
         
-        if (!systemStatus.initialized) {
+        if (!initStatus.is_initialized) {
             showInitializationModal();
         }
     } catch (error) {

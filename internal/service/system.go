@@ -153,13 +153,31 @@ func (s *SystemService) getServiceStatus(serviceName string) string {
 }
 
 func (s *SystemService) checkRequiredPackages() map[string]bool {
-	// 开发环境：模拟所有软件包已安装
 	packages := map[string]bool{
-		"postfix":  true,
-		"dovecot":  true,
-		"rspamd":   true,
-		"opendkim": true,
-		"acme.sh":  true,
+		// 邮件传输代理 (MTA)
+		"postfix":       s.isPackageInstalled("postfix"),
+		// 邮件投递代理 (MDA)  
+		"dovecot-core":  s.isPackageInstalled("dovecot-core"),
+		"dovecot-imapd": s.isPackageInstalled("dovecot-imapd"),
+		"dovecot-pop3d": s.isPackageInstalled("dovecot-pop3d"),
+		// 反垃圾邮件系统
+		"rspamd":        s.isPackageInstalled("rspamd"),
+		// 邮件认证
+		"opendkim":      s.isPackageInstalled("opendkim"),
+		// SSL/TLS证书管理
+		"acme.sh":       s.isAcmeShInstalled(),
+		// 防火墙
+		"ufw":           s.isPackageInstalled("ufw"),
+		// DNS工具
+		"dnsutils":      s.isPackageInstalled("dnsutils"),
+		// 入侵防护
+		"fail2ban":      s.isPackageInstalled("fail2ban"),
+		// 系统工具
+		"cron":          s.isPackageInstalled("cron"),
+		"logrotate":     s.isPackageInstalled("logrotate"),
+		// 网络工具
+		"curl":          s.isPackageInstalled("curl"),
+		"wget":          s.isPackageInstalled("wget"),
 	}
 	return packages
 }
@@ -497,4 +515,129 @@ InternalHosts 127.0.0.1
 OversignHeaders From
 TrustAnchorFile /usr/share/dns/root.key
 `, setupData.Domain)
+}
+
+// installAcmeSh 安装acme.sh证书管理工具
+func (s *SystemService) installAcmeSh() error {
+	log.Printf("开始安装acme.sh...")
+	
+	// 创建安装目录
+	if err := os.MkdirAll("/root/.acme.sh", 0700); err != nil {
+		log.Printf("警告: 创建acme.sh目录失败: %v", err)
+	}
+	
+	// 下载并安装acme.sh
+	installCmd := `curl https://get.acme.sh | sh -s email=admin@localhost`
+	if _, err := s.securityService.ExecuteSecureCommand("sh", []string{"-c", installCmd}, 120*time.Second); err != nil {
+		// 尝试备用方法
+		log.Printf("主安装方法失败，尝试备用方法...")
+		if _, err := s.securityService.ExecuteSecureCommand("wget", 
+			[]string{"-O-", "https://get.acme.sh"}, 60*time.Second); err != nil {
+			return fmt.Errorf("下载acme.sh失败: %v", err)
+		}
+	}
+	
+	log.Printf("✅ acme.sh安装完成")
+	return nil
+}
+
+// configureFirewall 配置防火墙规则
+func (s *SystemService) configureFirewall() error {
+	log.Printf("配置防火墙规则...")
+	
+	// 邮件系统需要开放的端口
+	ports := []string{
+		"22/tcp",   // SSH
+		"25/tcp",   // SMTP
+		"80/tcp",   // HTTP (证书验证)
+		"110/tcp",  // POP3
+		"143/tcp",  // IMAP
+		"465/tcp",  // SMTPS
+		"587/tcp",  // SMTP提交
+		"993/tcp",  // IMAPS
+		"995/tcp",  // POP3S
+		"8686/tcp", // Web管理界面
+	}
+	
+	// 重置UFW到默认状态
+	s.securityService.ExecuteSecureCommand("ufw", []string{"--force", "reset"}, 30*time.Second)
+	
+	// 设置默认策略
+	s.securityService.ExecuteSecureCommand("ufw", []string{"default", "deny", "incoming"}, 10*time.Second)
+	s.securityService.ExecuteSecureCommand("ufw", []string{"default", "allow", "outgoing"}, 10*time.Second)
+	
+	// 开放必要端口
+	for _, port := range ports {
+		if _, err := s.securityService.ExecuteSecureCommand("ufw", 
+			[]string{"allow", port}, 10*time.Second); err != nil {
+			log.Printf("警告: 开放端口 %s 失败: %v", port, err)
+		}
+	}
+	
+	// 启用防火墙
+	if _, err := s.securityService.ExecuteSecureCommand("ufw", 
+		[]string{"--force", "enable"}, 10*time.Second); err != nil {
+		log.Printf("警告: 启用防火墙失败: %v", err)
+		return err
+	}
+	
+	log.Printf("✅ 防火墙配置完成")
+	return nil
+}
+
+// checkSystemInitialization 检查系统是否已初始化
+func (s *SystemService) checkSystemInitialization() bool {
+	// 检查初始化标记文件
+	if _, err := os.Stat("./config/.initialized"); err != nil {
+		return false
+	}
+	
+	// 检查关键服务状态
+	criticalServices := []string{"postfix", "dovecot", "rspamd", "opendkim"}
+	for _, service := range criticalServices {
+		status := s.getServiceStatus(service)
+		if status != "active" && status != "running" {
+			return false
+		}
+	}
+	
+	return true
+}
+
+// GetInitializationStatus 获取系统初始化状态详情
+func (s *SystemService) GetInitializationStatus() map[string]interface{} {
+	packages := s.checkRequiredPackages()
+	services := s.getServicesStatus()
+	
+	// 统计安装状态
+	installedCount := 0
+	totalCount := len(packages)
+	for _, installed := range packages {
+		if installed {
+			installedCount++
+		}
+	}
+	
+	// 统计服务状态
+	activeServices := 0
+	totalServices := len(services)
+	for _, status := range services {
+		if status == "active" || status == "running" {
+			activeServices++
+		}
+	}
+	
+	return map[string]interface{}{
+		"is_initialized":   s.checkSystemInitialization(),
+		"packages":         packages,
+		"services":         services,
+		"packages_summary": map[string]int{
+			"installed": installedCount,
+			"total":     totalCount,
+		},
+		"services_summary": map[string]int{
+			"active": activeServices,
+			"total":  totalServices,
+		},
+	}
 }

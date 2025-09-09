@@ -194,7 +194,7 @@
                     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
                         <h1 class="h2">域名管理</h1>
                         <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary">
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-domain-modal">
                                 <i class="fas fa-plus"></i> 添加域名
                             </button>
                         </div>
@@ -211,7 +211,7 @@
                     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
                         <h1 class="h2">用户管理</h1>
                         <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary">
+                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-user-modal">
                                 <i class="fas fa-user-plus"></i> 添加用户
                             </button>
                         </div>
@@ -698,5 +698,136 @@
             }, 1000);
         });
     </script>
+
+    <!-- 添加域名模态框 -->
+    <div class="modal fade" id="add-domain-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加域名</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-domain-form">
+                        <div class="mb-3">
+                            <label for="domain-name" class="form-label">域名</label>
+                            <input type="text" class="form-control" id="domain-name" name="name" required placeholder="example.com">
+                        </div>
+                        <div class="mb-3">
+                            <label for="domain-description" class="form-label">描述</label>
+                            <textarea class="form-control" id="domain-description" name="description" rows="3" placeholder="域名用途说明"></textarea>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="domain-active" name="active" checked>
+                            <label class="form-check-label" for="domain-active">启用域名</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" form="add-domain-form" class="btn btn-primary">添加域名</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加用户模态框 -->
+    <div class="modal fade" id="add-user-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加用户</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-user-form">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <label for="user-email-local" class="form-label">邮箱地址</label>
+                                <input type="text" class="form-control" id="user-email-local" name="email_local" required placeholder="用户名">
+                            </div>
+                            <div class="col-md-4">
+                                <label for="user-domain" class="form-label">域名</label>
+                                <select class="form-select" id="user-domain" name="domain" required>
+                                    <option value="">选择域名</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="user-name" class="form-label">姓名</label>
+                            <input type="text" class="form-control" id="user-name" name="name" required placeholder="用户姓名">
+                        </div>
+                        <div class="mb-3">
+                            <label for="user-password" class="form-label">密码</label>
+                            <input type="password" class="form-control" id="user-password" name="password" required placeholder="至少8个字符">
+                        </div>
+                        <div class="mb-3">
+                            <label for="user-quota" class="form-label">邮箱配额 (MB)</label>
+                            <input type="number" class="form-control" id="user-quota" name="quota" value="1024" min="1">
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="user-active" name="active" checked>
+                            <label class="form-check-label" for="user-active">启用用户</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" form="add-user-form" class="btn btn-primary">创建用户</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 系统初始化模态框 -->
+    <div class="modal fade" id="system-init-modal" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">系统初始化</h5>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        检测到系统尚未完成初始化，需要安装和配置必要的依赖服务。
+                    </div>
+                    
+                    <h6>系统将安装以下组件：</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check-circle text-success"></i> Postfix (SMTP服务器)</li>
+                                <li><i class="fas fa-check-circle text-success"></i> Dovecot (IMAP/POP3服务器)</li>
+                                <li><i class="fas fa-check-circle text-success"></i> Rspamd (反垃圾邮件)</li>
+                                <li><i class="fas fa-check-circle text-success"></i> OpenDKIM (邮件认证)</li>
+                                <li><i class="fas fa-check-circle text-success"></i> acme.sh (SSL证书管理)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="list-unstyled">
+                                <li><i class="fas fa-check-circle text-success"></i> UFW (防火墙)</li>
+                                <li><i class="fas fa-check-circle text-success"></i> Fail2ban (入侵防护)</li>
+                                <li><i class="fas fa-check-circle text-success"></i> DNS工具</li>
+                                <li><i class="fas fa-check-circle text-success"></i> 系统工具</li>
+                                <li><i class="fas fa-check-circle text-success"></i> 网络工具</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div id="init-progress" class="d-none">
+                        <h6>初始化进度：</h6>
+                        <div class="progress mb-3">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
+                        </div>
+                        <div id="init-steps"></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="init-system-btn">开始初始化</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
