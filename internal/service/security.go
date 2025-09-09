@@ -29,6 +29,8 @@ func NewSecurityService() *SecurityService {
 		"dovecot":        true,
 		"chown":          true,
 		"chmod":          true,
+		"groupadd":       true,  // 允许创建用户组
+		"useradd":        true,  // 允许创建用户
 		"openssl":        true,  // 允许openssl用于证书解析
 		"df":             true,  // 允许df用于磁盘使用率查询
 		"dig":            true,  // 允许dig用于DNS查询

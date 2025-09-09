@@ -301,6 +301,45 @@ func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
 		log.Printf("已生成配置文件: %s", path)
 	}
 
+	// 创建Dovecot必需的用户文件和目录
+	s.createDovecotRequiredFiles()
+
+	return nil
+}
+
+func (s *SystemService) createDovecotRequiredFiles() error {
+	// 创建邮件存储目录
+	mailDirs := []string{
+		"/var/mail/vhosts",
+		"/var/run/dovecot",
+	}
+
+	for _, dir := range mailDirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			log.Printf("警告: 无法创建邮件目录 %s: %v", dir, err)
+		} else {
+			log.Printf("已创建邮件目录: %s", dir)
+		}
+	}
+
+	// 创建vmail用户组和用户 (如果不存在)
+	s.securityService.ExecuteSecureCommand("groupadd", []string{"-g", "5000", "vmail"}, 10*time.Second)
+	s.securityService.ExecuteSecureCommand("useradd", []string{"-g", "vmail", "-u", "5000", "vmail", "-d", "/var/mail", "-m"}, 10*time.Second)
+
+	// 设置邮件目录权限
+	s.securityService.ExecuteSecureCommand("chown", []string{"-R", "vmail:vmail", "/var/mail/vhosts"}, 10*time.Second)
+	s.securityService.ExecuteSecureCommand("chmod", []string{"-R", "0770", "/var/mail/vhosts"}, 10*time.Second)
+
+	// 创建空的用户文件（如果不存在）
+	usersFile := "/etc/dovecot/users"
+	if _, err := os.Stat(usersFile); os.IsNotExist(err) {
+		if err := os.WriteFile(usersFile, []byte("# Dovecot users file\n# Format: user:password:uid:gid::/var/mail/vhosts/domain/user\n"), 0600); err != nil {
+			log.Printf("警告: 无法创建用户文件 %s: %v", usersFile, err)
+		} else {
+			log.Printf("已创建Dovecot用户文件: %s", usersFile)
+		}
+	}
+
 	return nil
 }
 
@@ -372,11 +411,8 @@ func (s *SystemService) startServicesStep() error {
 		}
 	}
 	
-	// 配置防火墙
-	if err := s.configureFirewall(); err != nil {
-		log.Printf("配置防火墙失败: %v", err)
-		failedServices = append(failedServices, "ufw")
-	}
+	// 防火墙配置由系统管理员手动操作
+	log.Printf("提示: 请手动配置防火墙开放必要端口 (22, 25, 80, 110, 143, 465, 587, 993, 995, 8686)")
 	
 	if len(failedServices) > 0 {
 		return fmt.Errorf("以下服务启动失败: %v", failedServices)
@@ -508,16 +544,22 @@ listen = *, ::
 base_dir = /var/run/dovecot/
 instance_name = dovecot
 
-# SSL 配置
-ssl = required
-ssl_cert = </etc/ssl/mail/%s/fullchain.pem
-ssl_key = </etc/ssl/mail/%s/privkey.pem
+# SSL 配置 - 初始化时可选，证书就绪后可设为required
+ssl = yes
+ssl_cert = </etc/ssl/certs/ssl-cert-snakeoil.pem
+ssl_key = </etc/ssl/private/ssl-cert-snakeoil.key
 ssl_protocols = !SSLv2 !SSLv3
 
 # 邮件存储配置
 mail_location = maildir:/var/mail/vhosts/%%d/%%n/Maildir
 mail_uid = 5000
 mail_gid = 5000
+
+# 创建邮件存储目录
+first_valid_uid = 5000
+last_valid_uid = 5000
+first_valid_gid = 5000  
+last_valid_gid = 5000
 
 auth_mechanisms = plain login
 passdb {
@@ -620,49 +662,6 @@ func (s *SystemService) installAcmeSh() error {
 	return nil
 }
 
-// configureFirewall 配置防火墙规则
-func (s *SystemService) configureFirewall() error {
-	log.Printf("配置防火墙规则...")
-	
-	// 邮件系统需要开放的端口
-	ports := []string{
-		"22/tcp",   // SSH
-		"25/tcp",   // SMTP
-		"80/tcp",   // HTTP (证书验证)
-		"110/tcp",  // POP3
-		"143/tcp",  // IMAP
-		"465/tcp",  // SMTPS
-		"587/tcp",  // SMTP提交
-		"993/tcp",  // IMAPS
-		"995/tcp",  // POP3S
-		"8686/tcp", // Web管理界面
-	}
-	
-	// 重置UFW到默认状态
-	s.securityService.ExecuteSecureCommand("ufw", []string{"--force", "reset"}, 30*time.Second)
-	
-	// 设置默认策略
-	s.securityService.ExecuteSecureCommand("ufw", []string{"default", "deny", "incoming"}, 10*time.Second)
-	s.securityService.ExecuteSecureCommand("ufw", []string{"default", "allow", "outgoing"}, 10*time.Second)
-	
-	// 开放必要端口
-	for _, port := range ports {
-		if _, err := s.securityService.ExecuteSecureCommand("ufw", 
-			[]string{"allow", port}, 10*time.Second); err != nil {
-			log.Printf("警告: 开放端口 %s 失败: %v", port, err)
-		}
-	}
-	
-	// 启用防火墙
-	if _, err := s.securityService.ExecuteSecureCommand("ufw", 
-		[]string{"--force", "enable"}, 10*time.Second); err != nil {
-		log.Printf("警告: 启用防火墙失败: %v", err)
-		return err
-	}
-	
-	log.Printf("✅ 防火墙配置完成")
-	return nil
-}
 
 // checkSystemInitialization 检查系统是否已初始化
 func (s *SystemService) checkSystemInitialization() bool {
