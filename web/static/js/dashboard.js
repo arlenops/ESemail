@@ -4,8 +4,6 @@ let healthData = null;
 document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     checkSystemStatus();
-    // 首次加载时获取CSRF令牌
-    fetchCSRFToken();
     setInterval(refreshDashboard, 30000);
 });
 
@@ -506,40 +504,20 @@ function getAuthHeaders() {
 }
 
 // 获取CSRF令牌
-async function fetchCSRFToken() {
-    try {
-        const response = await fetch('/api/v1/csrf-token');
-        if (response.ok) {
-            const data = await response.json();
-            // 存储到sessionStorage
-            sessionStorage.setItem('csrf-token', data.csrf_token);
-        }
-    } catch (error) {
-        console.error('获取CSRF令牌失败:', error);
-    }
-}
-
-// 更新getCSRFToken函数以从sessionStorage获取
 function getCSRFToken() {
-    // 首先从sessionStorage获取
-    const sessionToken = sessionStorage.getItem('csrf-token');
-    if (sessionToken) {
-        return sessionToken;
+    // 从cookie获取
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrf-token') {
+            return decodeURIComponent(value);
+        }
     }
     
     // 从meta标签获取
     const metaToken = document.querySelector('meta[name="csrf-token"]');
     if (metaToken) {
         return metaToken.getAttribute('content');
-    }
-    
-    // 从cookie获取
-    const cookies = document.cookie.split(';');
-    for (let cookie of cookies) {
-        const [name, value] = cookie.trim().split('=');
-        if (name === 'csrf-token') {
-            return value;
-        }
     }
     
     return null;
@@ -550,10 +528,14 @@ async function addDomain(e) {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
     
+    const headers = getAuthHeaders();
+    console.log('发送域名添加请求，headers:', headers);
+    console.log('CSRF令牌:', getCSRFToken());
+    
     try {
         const response = await fetch('/api/v1/domains', {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: headers,
             body: JSON.stringify(data)
         });
         
@@ -564,9 +546,11 @@ async function addDomain(e) {
         } else {
             const error = await response.json();
             alert('添加失败: ' + error.error);
+            console.error('添加域名失败:', error);
         }
     } catch (error) {
         alert('添加失败: ' + error.message);
+        console.error('添加域名错误:', error);
     }
 }
 
