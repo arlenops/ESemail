@@ -247,9 +247,13 @@ func (s *SecurityService) RestartServiceSecure(serviceName string) error {
 		return fmt.Errorf("服务 '%s' 不被允许重启", serviceName)
 	}
 	
-	// 开发环境：模拟服务重启
+	// 使用安全的systemctl命令重启服务
 	log.Printf("DEBUG: RestartServiceSecure被调用，服务名: %s", serviceName)
-	log.Printf("INFO: 开发环境，模拟重启服务 %s（跳过真实systemctl命令）", serviceName)
+	if _, err := s.ExecuteSecureCommand("systemctl", []string{"restart", serviceName}, 30*time.Second); err != nil {
+		log.Printf("ERROR: 重启服务 %s 失败: %v", serviceName, err)
+		return fmt.Errorf("重启服务 %s 失败: %v", serviceName, err)
+	}
+	log.Printf("INFO: 成功重启服务 %s", serviceName)
 	return nil
 }
 
@@ -267,8 +271,12 @@ func (s *SecurityService) ReloadServiceSecure(serviceName string) error {
 		return fmt.Errorf("服务 '%s' 不被允许重载", serviceName)
 	}
 	
-	// 开发环境：模拟服务重载
-	log.Printf("开发环境：模拟重载服务 %s", serviceName)
+	// 使用安全的systemctl命令重载服务
+	if _, err := s.ExecuteSecureCommand("systemctl", []string{"reload", serviceName}, 30*time.Second); err != nil {
+		log.Printf("ERROR: 重载服务 %s 失败: %v", serviceName, err)
+		return fmt.Errorf("重载服务 %s 失败: %v", serviceName, err)
+	}
+	log.Printf("INFO: 成功重载服务 %s", serviceName)
 	return nil
 }
 
@@ -286,7 +294,13 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 		return "", fmt.Errorf("服务 '%s' 不被允许查询状态", serviceName)
 	}
 	
-	// 开发环境：返回模拟状态
-	log.Printf("开发环境：模拟检查服务 %s 状态", serviceName)
-	return "active", nil
+	// 使用安全的systemctl命令检查服务状态
+	output, err := s.ExecuteSecureCommand("systemctl", []string{"is-active", serviceName}, 10*time.Second)
+	if err != nil {
+		log.Printf("WARNING: 检查服务 %s 状态失败: %v", serviceName, err)
+		return "inactive", nil
+	}
+	status := strings.TrimSpace(string(output))
+	log.Printf("INFO: 服务 %s 状态: %s", serviceName, status)
+	return status, nil
 }

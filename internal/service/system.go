@@ -238,33 +238,40 @@ func (s *SystemService) generateDKIMStep(setupData *SetupConfig) error {
 		return fmt.Errorf("域名验证失败: %v", err)
 	}
 
-	dkimDir := "./config/opendkim/keys/default"
-	if err := os.MkdirAll(dkimDir, 0700); err != nil {
-		return fmt.Errorf("创建DKIM目录失败: %v", err)
+	// 创建 DKIM 目录
+	dkimDirs := []string{
+		"/etc/opendkim/keys/default",
+		"./config/opendkim/keys/default",
+	}
+	
+	for _, dkimDir := range dkimDirs {
+		if err := os.MkdirAll(dkimDir, 0700); err != nil {
+			log.Printf("警告: 无法创建 DKIM 目录 %s: %v", dkimDir, err)
+		}
 	}
 
-	// 在开发环境中，只创建DKIM配置文件占位符
-	// 实际的密钥生成在生产环境中进行
-	keyTable := fmt.Sprintf("default._domainkey.%s %s:default:./config/opendkim/keys/default/default.private\n", setupData.Domain, setupData.Domain)
-	if err := os.WriteFile("./config/opendkim/KeyTable", []byte(keyTable), 0644); err != nil {
-		return fmt.Errorf("创建KeyTable失败: %v", err)
+	// 生成真实的 DKIM 密钥对
+	log.Printf("生成 DKIM 密钥对...")
+	if _, err := s.securityService.ExecuteSecureCommand("opendkim-genkey", 
+		[]string{"-s", "default", "-d", setupData.Domain, "-D", "./config/opendkim/keys/default/"}, 
+		30*time.Second); err != nil {
+		log.Printf("警告: DKIM 密钥生成失败: %v", err)
+		// 创建占位符文件
+		privateKey := "# DKIM private key placeholder\n# Generate with: opendkim-genkey -s default -d " + setupData.Domain + "\n"
+		os.WriteFile("./config/opendkim/keys/default/default.private", []byte(privateKey), 0600)
+		publicKey := fmt.Sprintf("default._domainkey.%s IN TXT \"v=DKIM1; k=rsa; p=PLACEHOLDER_PUBLIC_KEY\"\n", setupData.Domain)
+		os.WriteFile("./config/opendkim/keys/default/default.txt", []byte(publicKey), 0644)
+	}
+
+	// 生成 DKIM 配置文件
+	keyTable := fmt.Sprintf("default._domainkey.%s %s:default:/etc/opendkim/keys/default/default.private\n", setupData.Domain, setupData.Domain)
+	for _, path := range []string{"/etc/opendkim/KeyTable", "./config/opendkim/KeyTable"} {
+		os.WriteFile(path, []byte(keyTable), 0644)
 	}
 
 	signingTable := fmt.Sprintf("*@%s default._domainkey.%s\n", setupData.Domain, setupData.Domain)
-	if err := os.WriteFile("./config/opendkim/SigningTable", []byte(signingTable), 0644); err != nil {
-		return fmt.Errorf("创建SigningTable失败: %v", err)
-	}
-
-	// 创建占位符私钥文件
-	privateKey := "# DKIM private key placeholder\n# In production, generate with: opendkim-genkey -s default -d " + setupData.Domain + "\n"
-	if err := os.WriteFile("./config/opendkim/keys/default/default.private", []byte(privateKey), 0600); err != nil {
-		return fmt.Errorf("创建私钥占位符失败: %v", err)
-	}
-
-	// 创建占位符公钥文件
-	publicKey := fmt.Sprintf("default._domainkey.%s IN TXT \"v=DKIM1; k=rsa; p=PLACEHOLDER_PUBLIC_KEY\"\n", setupData.Domain)
-	if err := os.WriteFile("./config/opendkim/keys/default/default.txt", []byte(publicKey), 0644); err != nil {
-		return fmt.Errorf("创建公钥占位符失败: %v", err)
+	for _, path := range []string{"/etc/opendkim/SigningTable", "./config/opendkim/SigningTable"} {
+		os.WriteFile(path, []byte(signingTable), 0644)
 	}
 
 	return nil
@@ -321,31 +328,30 @@ append_dot_mydomain = no
 readme_directory = no
 compatibility_level = 2
 
-# 开发环境禁用TLS
-# 生产环境启用TLS时取消注释以下行
-# smtpd_tls_cert_file = /etc/ssl/mail/%s/fullchain.pem
-# smtpd_tls_key_file = /etc/ssl/mail/%s/privkey.pem
-# smtpd_use_tls = yes
-# smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
-# smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
-# smtpd_tls_security_level = may
-# smtp_tls_security_level = may
+# TLS 配置
+smtpd_tls_cert_file = /etc/ssl/mail/%s/fullchain.pem
+smtpd_tls_key_file = /etc/ssl/mail/%s/privkey.pem
+smtpd_use_tls = yes
+smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
+smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
+smtpd_tls_security_level = may
+smtp_tls_security_level = may
 
-# 开发环境暂时禁用milter（anti-spam）
-# smtpd_milters = inet:localhost:11332, inet:localhost:8891
-# non_smtpd_milters = inet:localhost:11332, inet:localhost:8891
-# milter_protocol = 6
-# milter_mail_macros = i {mail_addr} {client_addr} {client_name} {auth_authen}
-# milter_default_action = accept
+# 反垃圾邮件配置
+smtpd_milters = inet:localhost:11332, inet:localhost:8891
+non_smtpd_milters = inet:localhost:11332, inet:localhost:8891
+milter_protocol = 6
+milter_mail_macros = i {mail_addr} {client_addr} {client_name} {auth_authen}
+milter_default_action = accept
 
 virtual_alias_domains =
 virtual_alias_maps = hash:/etc/postfix/virtual
 virtual_mailbox_domains = 
 virtual_mailbox_maps = hash:/etc/postfix/vmailbox
-virtual_mailbox_base = ./mail
-virtual_uid_maps = static:%d
-virtual_gid_maps = static:%d
-`, setupData.Hostname, setupData.Domain, setupData.Domain, setupData.Domain, os.Getuid(), os.Getgid())
+virtual_mailbox_base = /var/mail/vhosts
+virtual_uid_maps = static:5000
+virtual_gid_maps = static:5000
+`, setupData.Hostname, setupData.Domain, setupData.Domain, setupData.Domain)
 }
 
 func (s *SystemService) generatePostfixMasterConfig() string {
@@ -405,51 +411,47 @@ listen = *, ::
 base_dir = /var/run/dovecot/
 instance_name = dovecot
 
-# 开发环境禁用SSL，避免证书问题
-ssl = no
-# 生产环境使用SSL时取消注释以下行
-# ssl = required
-# ssl_cert = </etc/ssl/mail/%s/fullchain.pem
-# ssl_key = </etc/ssl/mail/%s/privkey.pem
-# ssl_protocols = !SSLv2 !SSLv3
+# SSL 配置
+ssl = required
+ssl_cert = </etc/ssl/mail/%s/fullchain.pem
+ssl_key = </etc/ssl/mail/%s/privkey.pem
+ssl_protocols = !SSLv2 !SSLv3
 
-# 使用相对路径避免权限问题
-mail_location = maildir:./mail/%%d/%%n/Maildir
-mail_uid = %d
-mail_gid = %d
+# 邮件存储配置
+mail_location = maildir:/var/mail/vhosts/%%d/%%n/Maildir
+mail_uid = 5000
+mail_gid = 5000
 
 auth_mechanisms = plain login
 passdb {
   driver = passwd-file
-  args = scheme=CRYPT username_format=%%u ./config/dovecot/users
+  args = scheme=CRYPT username_format=%%u /etc/dovecot/users
 }
 userdb {
   driver = static
-  args = uid=%d gid=%d home=./mail/%%d/%%n
+  args = uid=5000 gid=5000 home=/var/mail/vhosts/%%d/%%n
 }
 
 service imap-login {
   inet_listener imap {
-    port = 993
+    port = 143
     ssl = no
   }
-  # 生产环境启用IMAPS
-  # inet_listener imaps {
-  #   port = 993
-  #   ssl = yes
-  # }
+  inet_listener imaps {
+    port = 993
+    ssl = yes
+  }
 }
 
 service pop3-login {
   inet_listener pop3 {
-    port = 995
+    port = 110
     ssl = no
   }
-  # 生产环境启用POP3S
-  # inet_listener pop3s {
-  #   port = 995
-  #   ssl = yes
-  # }
+  inet_listener pop3s {
+    port = 995
+    ssl = yes
+  }
 }
 
 namespace inbox {
@@ -471,7 +473,7 @@ namespace inbox {
     special_use = \Trash
   }
 }
-`, setupData.Domain, setupData.Domain, os.Getuid(), os.Getgid(), os.Getuid(), os.Getgid())
+`, setupData.Domain, setupData.Domain)
 }
 
 func (s *SystemService) generateRspamdConfig() string {

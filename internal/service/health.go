@@ -111,9 +111,26 @@ func (s *HealthService) isPortListening(port int) bool {
 }
 
 func (s *HealthService) getServicePID(serviceName string) string {
-	// 开发环境：返回模拟PID
-	log.Printf("开发环境：模拟获取服务 %s PID", serviceName)
-	return "12345"
+	// 使用安全的命令获取服务PID
+	output, err := s.securityService.ExecuteSecureCommand("systemctl", 
+		[]string{"show", "--property=MainPID", serviceName}, 10*time.Second)
+	if err != nil {
+		log.Printf("WARNING: 获取服务 %s PID失败: %v", serviceName, err)
+		return ""
+	}
+	
+	// 解析输出: MainPID=1234
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "MainPID=") {
+			pid := strings.TrimPrefix(line, "MainPID=")
+			if pid == "0" {
+				return ""
+			}
+			return pid
+		}
+	}
+	return ""
 }
 
 func (s *HealthService) calculateOverallState(services []ServiceStatus) string {
