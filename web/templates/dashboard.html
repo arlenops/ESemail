@@ -3,51 +3,389 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.title}}</title>
+    <title>{{.title}} - ESemail 邮件服务管理</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
-    <link href="/static/css/dashboard.css" rel="stylesheet">
+    <link href="/static/css/modern-theme.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/chart.js"></script>
     <script src="/static/js/dashboard.js"></script>
 </head>
 <body>
-    <div class="container-fluid">
+    <!-- 顶部导航栏 -->
+    <nav class="navbar navbar-expand-lg fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                ESemail 管理控制台
+            </a>
+            <div class="navbar-nav ms-auto">
+                <div class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-white" href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-user-circle"></i> 管理员
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-cog"></i> 设置</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/logout"><i class="fas fa-sign-out-alt"></i> 退出</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container-fluid" style="padding-top: 70px;">
         <div class="row">
-            <nav class="col-md-2 d-none d-md-block bg-light sidebar">
+            <!-- 侧边栏 -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse" id="sidebar">
                 <div class="sidebar-sticky">
                     <ul class="nav flex-column">
                         <li class="nav-item">
-                            <a class="nav-link active" href="#dashboard">
-                                <i class="fas fa-tachometer-alt"></i>
+                            <a class="nav-link active" href="#dashboard" data-section="dashboard">
+                                <i class="fas fa-chart-line"></i>
                                 系统监控
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#domains">
+                            <a class="nav-link" href="#domains" data-section="domains">
                                 <i class="fas fa-globe"></i>
                                 域名管理
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#users">
+                            <a class="nav-link" href="#users" data-section="users">
                                 <i class="fas fa-users"></i>
                                 用户管理
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#mail">
+                            <a class="nav-link" href="#mail" data-section="mail">
                                 <i class="fas fa-envelope"></i>
                                 邮件历史
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#certificates">
-                                <i class="fas fa-certificate"></i>
+                            <a class="nav-link" href="#certificates" data-section="certificates">
+                                <i class="fas fa-shield-alt"></i>
                                 证书管理
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#system">
+                            <a class="nav-link" href="#system" data-section="system">
+                                <i class="fas fa-cog"></i>
+                                系统设置
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- 主内容区域 -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <!-- 系统监控面板 -->
+                <div id="dashboard-section" class="section-content">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+                        <h1 class="h2">系统监控</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="refresh-dashboard">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 统计卡片 -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="stat-card">
+                                <div class="stat-number" id="total-users">--</div>
+                                <div class="stat-label">总用户数</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card" style="background: var(--gradient-success);">
+                                <div class="stat-number" id="active-domains">--</div>
+                                <div class="stat-label">活跃域名</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card" style="background: var(--gradient-warning);">
+                                <div class="stat-number" id="mail-queue">--</div>
+                                <div class="stat-label">邮件队列</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="stat-card" style="background: var(--gradient-danger);">
+                                <div class="stat-number" id="system-load">--</div>
+                                <div class="stat-label">系统负载</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 服务状态 -->
+                    <div class="row mb-4">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="fas fa-server"></i> 服务状态
+                                </div>
+                                <div class="card-body">
+                                    <div id="services-list" class="row">
+                                        <div class="col-12 text-center">
+                                            <div class="loading-spinner"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="system-info">
+                                <h5 class="mb-3"><i class="fas fa-info-circle"></i> 系统信息</h5>
+                                <div class="info-item">
+                                    <span class="info-label">CPU 使用率</span>
+                                    <span class="info-value" id="cpu-usage">--</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">内存使用率</span>
+                                    <span class="info-value" id="memory-usage">--</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">磁盘使用率</span>
+                                    <span class="info-value" id="disk-usage">--</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">系统运行时间</span>
+                                    <span class="info-value" id="uptime">--</span>
+                                </div>
+                                <div class="info-item">
+                                    <span class="info-label">负载平均</span>
+                                    <span class="info-value" id="load-average">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 系统初始化面板 -->
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="fas fa-rocket"></i> 系统初始化
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted mb-3">首次使用或重新配置系统时，请执行系统初始化以设置所有邮件服务。</p>
+                                    <button class="btn btn-primary" id="init-system" onclick="initializeSystem()">
+                                        <i class="fas fa-play"></i> 开始初始化
+                                    </button>
+                                    <div id="init-progress" class="mt-3" style="display: none;">
+                                        <div class="progress mb-3">
+                                            <div class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                        </div>
+                                        <div id="init-steps"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 其他页面内容占位符 -->
+                <div id="domains-section" class="section-content" style="display: none;">
+                    <h1 class="h2">域名管理</h1>
+                    <div class="empty-state">
+                        <i class="fas fa-globe"></i>
+                        <h3>域名管理</h3>
+                        <p>管理您的邮件域名配置</p>
+                    </div>
+                </div>
+
+                <div id="users-section" class="section-content" style="display: none;">
+                    <h1 class="h2">用户管理</h1>
+                    <div class="empty-state">
+                        <i class="fas fa-users"></i>
+                        <h3>用户管理</h3>
+                        <p>管理邮件用户账户</p>
+                    </div>
+                </div>
+
+                <div id="mail-section" class="section-content" style="display: none;">
+                    <h1 class="h2">邮件历史</h1>
+                    <div class="empty-state">
+                        <i class="fas fa-envelope"></i>
+                        <h3>邮件历史</h3>
+                        <p>查看邮件收发记录</p>
+                    </div>
+                </div>
+
+                <div id="certificates-section" class="section-content" style="display: none;">
+                    <h1 class="h2">证书管理</h1>
+                    <div class="empty-state">
+                        <i class="fas fa-shield-alt"></i>
+                        <h3>SSL证书管理</h3>
+                        <p>管理SSL/TLS证书</p>
+                    </div>
+                </div>
+
+                <div id="system-section" class="section-content" style="display: none;">
+                    <h1 class="h2">系统设置</h1>
+                    <div class="empty-state">
+                        <i class="fas fa-cog"></i>
+                        <h3>系统设置</h3>
+                        <p>配置系统参数</p>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // 页面切换逻辑
+        document.addEventListener('DOMContentLoaded', function() {
+            const navLinks = document.querySelectorAll('.sidebar .nav-link');
+            const sections = document.querySelectorAll('.section-content');
+
+            navLinks.forEach(link => {
+                link.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // 更新导航状态
+                    navLinks.forEach(l => l.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // 显示对应页面
+                    const targetSection = this.getAttribute('data-section') + '-section';
+                    sections.forEach(section => {
+                        section.style.display = 'none';
+                    });
+                    
+                    const target = document.getElementById(targetSection);
+                    if (target) {
+                        target.style.display = 'block';
+                        target.classList.add('fade-in-up');
+                    }
+                    
+                    // 如果是仪表板，刷新数据
+                    if (targetSection === 'dashboard-section') {
+                        loadDashboardData();
+                    }
+                });
+            });
+            
+            // 初始化加载数据
+            loadDashboardData();
+        });
+
+        // 加载仪表板数据
+        function loadDashboardData() {
+            // 加载健康状态
+            fetch('/api/v1/health')
+                .then(response => response.json())
+                .then(data => {
+                    updateSystemStats(data);
+                    updateServicesStatus(data.services);
+                })
+                .catch(error => {
+                    console.error('Error loading health data:', error);
+                });
+        }
+
+        // 更新系统统计
+        function updateSystemStats(data) {
+            if (data.system_info) {
+                document.getElementById('cpu-usage').textContent = data.system_info.cpu_usage + '%';
+                document.getElementById('memory-usage').textContent = data.system_info.memory_usage.toFixed(1) + '%';
+                document.getElementById('disk-usage').textContent = data.system_info.disk_usage + '%';
+                document.getElementById('uptime').textContent = data.system_info.uptime;
+                document.getElementById('load-average').textContent = data.system_info.load_average;
+                document.getElementById('system-load').textContent = data.system_info.cpu_usage + '%';
+            }
+        }
+
+        // 更新服务状态
+        function updateServicesStatus(services) {
+            const container = document.getElementById('services-list');
+            container.innerHTML = '';
+            
+            services.forEach(service => {
+                const statusClass = service.status === 'healthy' ? 'success' : 
+                                  service.status === 'warning' ? 'warning' : 'danger';
+                                  
+                const serviceCard = document.createElement('div');
+                serviceCard.className = 'col-md-6 mb-3';
+                serviceCard.innerHTML = `
+                    <div class="service-card ${service.status}">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h6 class="mb-1">${service.name}</h6>
+                                <small class="text-muted">${service.message}</small>
+                            </div>
+                            <div>
+                                <span class="status-indicator status-${service.status}"></span>
+                                <span class="badge bg-${statusClass}">${service.status}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(serviceCard);
+            });
+        }
+
+        // 系统初始化
+        function initializeSystem() {
+            const button = document.getElementById('init-system');
+            const progress = document.getElementById('init-progress');
+            const steps = document.getElementById('init-steps');
+            
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 初始化中...';
+            progress.style.display = 'block';
+            
+            // 模拟初始化数据
+            const initData = {
+                domain: 'example.com',
+                admin_email: 'admin@example.com',
+                admin_password: 'admin123',
+                smtp_host: 'localhost',
+                smtp_port: 587
+            };
+            
+            fetch('/api/v1/system/init', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(initData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.querySelector('.progress-bar').style.width = '100%';
+                    steps.innerHTML = '<div class="alert alert-success"><i class="fas fa-check"></i> 初始化完成！</div>';
+                    button.innerHTML = '<i class="fas fa-check"></i> 初始化完成';
+                } else {
+                    steps.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 初始化失败: ${data.message}</div>`;
+                    button.innerHTML = '<i class="fas fa-times"></i> 初始化失败';
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Init error:', error);
+                steps.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 网络错误</div>';
+                button.innerHTML = '<i class="fas fa-times"></i> 网络错误';
+                button.disabled = false;
+            });
+        }
+
+        // 刷新按钮
+        document.getElementById('refresh-dashboard').addEventListener('click', function() {
+            loadDashboardData();
+            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 刷新中...';
+            setTimeout(() => {
+                this.innerHTML = '<i class="fas fa-sync-alt"></i> 刷新';
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
                                 <i class="fas fa-cog"></i>
                                 系统设置
                             </a>
