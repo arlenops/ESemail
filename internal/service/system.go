@@ -239,8 +239,11 @@ func (s *SystemService) installPackagesStep() error {
 			}
 		} else {
 			// 使用apt安装
-			if _, err := s.securityService.ExecuteSecureCommand("apt", []string{"install", "-y", pkg}, 300*time.Second); err != nil {
-				return fmt.Errorf("安装%s失败: %v", pkg, err)
+			log.Printf("开始安装软件包: %s", pkg)
+			output, err := s.securityService.ExecuteSecureCommand("apt", []string{"install", "-y", pkg}, 300*time.Second)
+			if err != nil {
+				log.Printf("安装失败，命令输出: %s", string(output))
+				return fmt.Errorf("安装%s失败: %v, 输出: %s", pkg, err, string(output))
 			}
 			log.Printf("✅ 已安装: %s", pkg)
 		}
