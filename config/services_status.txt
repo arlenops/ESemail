@@ -1,5 +1,0 @@
-Services simulated startup at 2025-09-09 15:27:57
-postfix: simulated
-dovecot: simulated
-rspamd: simulated
-opendkim: simulated

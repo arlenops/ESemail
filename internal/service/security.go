@@ -288,6 +288,7 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 		"dovecot":  true,
 		"rspamd":   true,
 		"opendkim": true,
+		"fail2ban": true,
 	}
 	
 	if !allowedServices[serviceName] {
@@ -296,11 +297,26 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 	
 	// 使用安全的systemctl命令检查服务状态
 	output, err := s.ExecuteSecureCommand("systemctl", []string{"is-active", serviceName}, 10*time.Second)
-	if err != nil {
-		log.Printf("WARNING: 检查服务 %s 状态失败: %v", serviceName, err)
-		return "inactive", nil
-	}
 	status := strings.TrimSpace(string(output))
+	
+	if err != nil {
+		// 检查是否是因为服务不存在
+		if strings.Contains(status, "failed") || strings.Contains(status, "inactive") {
+			log.Printf("INFO: 服务 %s 状态: %s", serviceName, status)
+			return status, nil
+		}
+		
+		// 检查服务是否安装
+		unitOutput, unitErr := s.ExecuteSecureCommand("systemctl", []string{"list-unit-files", serviceName + ".service"}, 10*time.Second)
+		if unitErr != nil || !strings.Contains(string(unitOutput), serviceName) {
+			log.Printf("WARNING: 服务 %s 未安装或不存在", serviceName)
+			return "not-found", nil
+		}
+		
+		log.Printf("WARNING: 检查服务 %s 状态失败: %v, 输出: %s", serviceName, err, status)
+		return "unknown", nil
+	}
+	
 	log.Printf("INFO: 服务 %s 状态: %s", serviceName, status)
 	return status, nil
 }

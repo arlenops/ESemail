@@ -140,6 +140,7 @@ func (s *SystemService) getServicesStatus() map[string]string {
 		"dovecot":  s.getServiceStatus("dovecot"),
 		"rspamd":   s.getServiceStatus("rspamd"),
 		"opendkim": s.getServiceStatus("opendkim"),
+		"fail2ban": s.getServiceStatus("fail2ban"),
 	}
 	return services
 }
@@ -194,16 +195,55 @@ func (s *SystemService) isAcmeShInstalled() bool {
 }
 
 func (s *SystemService) checkPackagesStep() error {
-	// 在开发环境中，跳过软件包检查
-	log.Printf("开发环境：跳过软件包检查")
-	log.Printf("生产环境需要的软件包: postfix, dovecot-core, rspamd, opendkim")
+	packages := s.checkRequiredPackages()
+	var missing []string
+	for name, installed := range packages {
+		if !installed {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("缺少必需软件包: %v", missing)
+	}
+	log.Printf("所有必需软件包已安装")
 	return nil
 }
 
 func (s *SystemService) installPackagesStep() error {
-	// 开发环境跳过软件包安装
-	log.Printf("开发环境：跳过软件包安装")
-	log.Printf("生产环境需要安装: postfix, dovecot-core, rspamd, opendkim 等")
+	packages := s.checkRequiredPackages()
+	var toInstall []string
+	for name, installed := range packages {
+		if !installed {
+			toInstall = append(toInstall, name)
+		}
+	}
+	if len(toInstall) == 0 {
+		log.Printf("所有软件包已安装")
+		return nil
+	}
+	
+	// 更新软件包缓存
+	log.Printf("更新软件包缓存...")
+	if _, err := s.securityService.ExecuteSecureCommand("apt", []string{"update"}, 120*time.Second); err != nil {
+		log.Printf("警告: 更新软件包缓存失败: %v", err)
+	}
+	
+	// 安装缺失的软件包
+	for _, pkg := range toInstall {
+		log.Printf("安装软件包: %s", pkg)
+		if pkg == "acme.sh" {
+			// 特殊处理acme.sh安装
+			if err := s.installAcmeSh(); err != nil {
+				return fmt.Errorf("安装acme.sh失败: %v", err)
+			}
+		} else {
+			// 使用apt安装
+			if _, err := s.securityService.ExecuteSecureCommand("apt", []string{"install", "-y", pkg}, 300*time.Second); err != nil {
+				return fmt.Errorf("安装%s失败: %v", pkg, err)
+			}
+			log.Printf("✅ 已安装: %s", pkg)
+		}
+	}
 	return nil
 }
 
@@ -227,8 +267,14 @@ func (s *SystemService) createDirectoriesStep() error {
 }
 
 func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
-	// 在开发环境中，只生成基础配置文件到本地目录
+	// 生成配置文件到系统目录
 	configs := map[string]string{
+		"/etc/postfix/main.cf":          s.generatePostfixMainConfig(setupData),
+		"/etc/postfix/master.cf":        s.generatePostfixMasterConfig(),
+		"/etc/dovecot/dovecot.conf":     s.generateDovecotConfig(setupData),
+		"/etc/rspamd/local.d/options.inc": s.generateRspamdConfig(),
+		"/etc/opendkim.conf":            s.generateOpenDKIMConfig(setupData),
+		// 本地备份配置
 		"./config/postfix_main.cf":     s.generatePostfixMainConfig(setupData),
 		"./config/postfix_master.cf":   s.generatePostfixMasterConfig(),
 		"./config/dovecot_config.conf": s.generateDovecotConfig(setupData),
@@ -239,12 +285,15 @@ func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
 	for path, content := range configs {
 		dir := filepath.Dir(path)
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("创建配置目录 %s 失败: %v", dir, err)
+			log.Printf("警告: 无法创建目录 %s: %v", dir, err)
+			continue
 		}
 
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-			return fmt.Errorf("创建配置文件 %s 失败: %v", path, err)
+			log.Printf("警告: 无法创建配置文件 %s: %v", path, err)
+			continue
 		}
+		log.Printf("已生成配置文件: %s", path)
 	}
 
 	return nil
@@ -296,34 +345,59 @@ func (s *SystemService) generateDKIMStep(setupData *SetupConfig) error {
 }
 
 func (s *SystemService) startServicesStep() error {
-	// 在开发环境中，只模拟服务启动
-	// 实际的邮件服务需要在生产环境中启动
-	log.Printf("开发环境：跳过邮件服务启动")
-	log.Printf("生产环境中需要启动的服务: postfix, dovecot, rspamd, opendkim")
+	services := []string{"postfix", "dovecot", "rspamd", "opendkim", "fail2ban"}
+	var failedServices []string
 	
-	// 创建服务状态文件表示已"启动"
-	statusFile := "./config/services_status.txt"
-	status := fmt.Sprintf("Services simulated startup at %s\n", time.Now().Format("2006-01-02 15:04:05"))
-	status += "postfix: simulated\n"
-	status += "dovecot: simulated\n" 
-	status += "rspamd: simulated\n"
-	status += "opendkim: simulated\n"
+	log.Printf("启动邮件系统服务...")
 	
-	if err := os.WriteFile(statusFile, []byte(status), 0644); err != nil {
-		return fmt.Errorf("创建服务状态文件失败: %v", err)
+	// 启动每个服务
+	for _, service := range services {
+		log.Printf("启动服务: %s", service)
+		cmd := exec.Command("systemctl", "start", service)
+		if err := cmd.Run(); err != nil {
+			log.Printf("启动服务 %s 失败: %v", service, err)
+			failedServices = append(failedServices, service)
+			continue
+		}
+		
+		// 启用服务自启动
+		cmd = exec.Command("systemctl", "enable", service)
+		if err := cmd.Run(); err != nil {
+			log.Printf("启用服务 %s 自启动失败: %v", service, err)
+		}
 	}
-
+	
+	// 配置防火墙
+	if err := s.configureFirewall(); err != nil {
+		log.Printf("配置防火墙失败: %v", err)
+		failedServices = append(failedServices, "ufw")
+	}
+	
+	if len(failedServices) > 0 {
+		return fmt.Errorf("以下服务启动失败: %v", failedServices)
+	}
+	
+	log.Printf("所有邮件系统服务启动完成")
 	return nil
 }
 
 func (s *SystemService) verifyServicesStep() error {
-	// 在开发环境中，只检查状态文件
-	statusFile := "./config/services_status.txt"
-	if _, err := os.Stat(statusFile); err != nil {
-		return fmt.Errorf("服务状态文件不存在: %v", err)
+	services := []string{"postfix", "dovecot", "rspamd", "opendkim", "fail2ban"}
+	var failedServices []string
+	
+	for _, service := range services {
+		status := s.getServiceStatus(service)
+		log.Printf("服务 %s 状态: %s", service, status)
+		if status != "active" && status != "running" {
+			failedServices = append(failedServices, service)
+		}
 	}
-
-	log.Printf("开发环境：服务验证通过（模拟模式）")
+	
+	if len(failedServices) > 0 {
+		return fmt.Errorf("以下服务未正常运行: %v", failedServices)
+	}
+	
+	log.Printf("所有邮件服务验证通过")
 	return nil
 }
 

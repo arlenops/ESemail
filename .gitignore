@@ -52,6 +52,9 @@ Thumbs.db
 *.pid
 *.seed
 *.pid.lock
+.initialized
+services_status.txt
+*_config.conf
 
 # 备份文件
 *.backup
