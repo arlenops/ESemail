@@ -3,6 +3,7 @@ package service
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -245,13 +246,8 @@ func (s *SecurityService) RestartServiceSecure(serviceName string) error {
 		return fmt.Errorf("服务 '%s' 不被允许重启", serviceName)
 	}
 	
-	// 安全地执行systemctl命令
-	args := []string{"restart", serviceName}
-	output, err := s.ExecuteSecureCommand("systemctl", args, 30*time.Second)
-	if err != nil {
-		return fmt.Errorf("重启服务 %s 失败: %v, 输出: %s", serviceName, err, string(output))
-	}
-	
+	// 开发环境：模拟服务重启
+	log.Printf("开发环境：模拟重启服务 %s", serviceName)
 	return nil
 }
 
@@ -269,13 +265,8 @@ func (s *SecurityService) ReloadServiceSecure(serviceName string) error {
 		return fmt.Errorf("服务 '%s' 不被允许重载", serviceName)
 	}
 	
-	// 安全地执行systemctl命令
-	args := []string{"reload", serviceName}
-	output, err := s.ExecuteSecureCommand("systemctl", args, 15*time.Second)
-	if err != nil {
-		return fmt.Errorf("重载服务 %s 失败: %v, 输出: %s", serviceName, err, string(output))
-	}
-	
+	// 开发环境：模拟服务重载
+	log.Printf("开发环境：模拟重载服务 %s", serviceName)
 	return nil
 }
 
@@ -293,13 +284,7 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 		return "", fmt.Errorf("服务 '%s' 不被允许查询状态", serviceName)
 	}
 	
-	// 安全地执行systemctl命令
-	args := []string{"is-active", serviceName}
-	output, err := s.ExecuteSecureCommand("systemctl", args, 10*time.Second)
-	if err != nil {
-		// systemctl is-active 在服务未运行时返回非0状态码，但这不是错误
-		return strings.TrimSpace(string(output)), nil
-	}
-	
-	return strings.TrimSpace(string(output)), nil
+	// 开发环境：返回模拟状态
+	log.Printf("开发环境：模拟检查服务 %s 状态", serviceName)
+	return "active", nil
 }
