@@ -440,12 +440,34 @@
         const authToken = localStorage.getItem('auth_token');
         
         // 检查认证状态
-        function checkAuth() {
+        async function checkAuth() {
             if (!authToken) {
+                console.log('没有找到认证令牌，跳转到登录页面');
                 redirectToLogin();
                 return false;
             }
-            return true;
+            
+            // 验证令牌是否有效
+            try {
+                const response = await fetch('/api/v1/auth/me', {
+                    headers: {
+                        'Authorization': 'Bearer ' + authToken
+                    }
+                });
+                
+                if (!response.ok) {
+                    console.log('认证令牌无效，跳转到登录页面');
+                    redirectToLogin();
+                    return false;
+                }
+                
+                console.log('认证令牌有效');
+                return true;
+            } catch (error) {
+                console.error('验证认证令牌失败:', error);
+                redirectToLogin();
+                return false;
+            }
         }
         
         // 跳转到登录页面
@@ -525,9 +547,9 @@
         }
         
         // 页面切换逻辑
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
             // 检查认证状态
-            if (!checkAuth()) {
+            if (!(await checkAuth())) {
                 return;
             }
             

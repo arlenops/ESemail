@@ -2,10 +2,26 @@ let currentSection = 'dashboard';
 let healthData = null;
 
 document.addEventListener('DOMContentLoaded', function() {
+    // 检查认证状态
+    if (!checkAuthToken()) {
+        return;
+    }
+    
     initializeEventListeners();
     checkSystemStatus();
     setInterval(refreshDashboard, 30000);
 });
+
+// 检查认证令牌
+function checkAuthToken() {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+        console.log('没有认证令牌，跳转到登录页面');
+        window.location.href = '/login';
+        return false;
+    }
+    return true;
+}
 
 function initializeEventListeners() {
     document.querySelectorAll('.nav-link').forEach(link => {
