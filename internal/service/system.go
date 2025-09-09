@@ -204,9 +204,10 @@ func (s *SystemService) checkPackagesStep() error {
 		}
 	}
 	if len(missing) > 0 {
-		return fmt.Errorf("缺少必需软件包: %v", missing)
+		log.Printf("发现缺少的软件包: %v，将在下一步骤中安装", missing)
+	} else {
+		log.Printf("所有必需软件包已安装")
 	}
-	log.Printf("所有必需软件包已安装")
 	return nil
 }
 
