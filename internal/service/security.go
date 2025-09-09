@@ -243,11 +243,13 @@ func (s *SecurityService) RestartServiceSecure(serviceName string) error {
 	}
 	
 	if !allowedServices[serviceName] {
+		log.Printf("ERROR: 服务 '%s' 不被允许重启", serviceName)
 		return fmt.Errorf("服务 '%s' 不被允许重启", serviceName)
 	}
 	
 	// 开发环境：模拟服务重启
-	log.Printf("开发环境：模拟重启服务 %s", serviceName)
+	log.Printf("DEBUG: RestartServiceSecure被调用，服务名: %s", serviceName)
+	log.Printf("INFO: 开发环境，模拟重启服务 %s（跳过真实systemctl命令）", serviceName)
 	return nil
 }
 

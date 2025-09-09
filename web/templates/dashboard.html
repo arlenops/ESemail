@@ -188,49 +188,109 @@
                     </div>
                 </div>
 
-                <!-- 其他页面内容占位符 -->
+                <!-- 域名管理页面 -->
                 <div id="domains-section" class="section-content" style="display: none;">
-                    <h1 class="h2">域名管理</h1>
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+                        <h1 class="h2">域名管理</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <button type="button" class="btn btn-primary">
+                                <i class="fas fa-plus"></i> 添加域名
+                            </button>
+                        </div>
+                    </div>
                     <div class="empty-state">
                         <i class="fas fa-globe"></i>
                         <h3>域名管理</h3>
-                        <p>管理您的邮件域名配置</p>
+                        <p>管理您的邮件域名配置，设置DNS记录和域名验证</p>
                     </div>
                 </div>
 
+                <!-- 用户管理页面 -->
                 <div id="users-section" class="section-content" style="display: none;">
-                    <h1 class="h2">用户管理</h1>
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+                        <h1 class="h2">用户管理</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <button type="button" class="btn btn-primary">
+                                <i class="fas fa-user-plus"></i> 添加用户
+                            </button>
+                        </div>
+                    </div>
                     <div class="empty-state">
                         <i class="fas fa-users"></i>
                         <h3>用户管理</h3>
-                        <p>管理邮件用户账户</p>
+                        <p>管理邮件用户账户，设置密码和邮箱配额</p>
                     </div>
                 </div>
 
+                <!-- 邮件历史页面 -->
                 <div id="mail-section" class="section-content" style="display: none;">
-                    <h1 class="h2">邮件历史</h1>
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+                        <h1 class="h2">邮件历史</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <div class="input-group">
+                                <input type="date" class="form-control">
+                                <button class="btn btn-outline-primary" type="button">
+                                    <i class="fas fa-search"></i> 搜索
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                     <div class="empty-state">
                         <i class="fas fa-envelope"></i>
                         <h3>邮件历史</h3>
-                        <p>查看邮件收发记录</p>
+                        <p>查看邮件收发记录，下载原始邮件文件</p>
                     </div>
                 </div>
 
+                <!-- 证书管理页面 -->
                 <div id="certificates-section" class="section-content" style="display: none;">
-                    <h1 class="h2">证书管理</h1>
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+                        <h1 class="h2">证书管理</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <button type="button" class="btn btn-primary">
+                                <i class="fas fa-certificate"></i> 签发证书
+                            </button>
+                        </div>
+                    </div>
                     <div class="empty-state">
                         <i class="fas fa-shield-alt"></i>
                         <h3>SSL证书管理</h3>
-                        <p>管理SSL/TLS证书</p>
+                        <p>管理SSL/TLS证书，自动续签和DNS验证</p>
                     </div>
                 </div>
 
+                <!-- 系统设置页面 -->
                 <div id="system-section" class="section-content" style="display: none;">
-                    <h1 class="h2">系统设置</h1>
-                    <div class="empty-state">
-                        <i class="fas fa-cog"></i>
-                        <h3>系统设置</h3>
-                        <p>配置系统参数</p>
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+                        <h1 class="h2">系统设置</h1>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="fas fa-cog"></i> 基础设置
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">配置系统基础参数和邮件服务选项</p>
+                                    <button class="btn btn-outline-primary">
+                                        <i class="fas fa-edit"></i> 编辑设置
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header">
+                                    <i class="fas fa-shield-alt"></i> 安全设置
+                                </div>
+                                <div class="card-body">
+                                    <p class="text-muted">配置防火墙规则和安全策略</p>
+                                    <button class="btn btn-outline-primary">
+                                        <i class="fas fa-lock"></i> 安全配置
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </main>
@@ -272,6 +332,13 @@
             
             // 初始化加载数据
             loadDashboardData();
+            
+            // 设置自动刷新
+            setInterval(function() {
+                if (document.getElementById('dashboard-section').style.display !== 'none') {
+                    loadDashboardData();
+                }
+            }, 30000); // 30秒自动刷新
         });
 
         // 加载仪表板数据
@@ -281,10 +348,13 @@
                 .then(response => response.json())
                 .then(data => {
                     updateSystemStats(data);
-                    updateServicesStatus(data.services);
+                    updateServicesStatus(data.services || []);
                 })
                 .catch(error => {
                     console.error('Error loading health data:', error);
+                    // 显示错误状态
+                    document.getElementById('services-list').innerHTML = 
+                        '<div class="col-12"><div class="alert alert-warning">无法加载服务状态数据</div></div>';
                 });
         }
 
@@ -294,16 +364,26 @@
                 document.getElementById('cpu-usage').textContent = data.system_info.cpu_usage + '%';
                 document.getElementById('memory-usage').textContent = data.system_info.memory_usage.toFixed(1) + '%';
                 document.getElementById('disk-usage').textContent = data.system_info.disk_usage + '%';
-                document.getElementById('uptime').textContent = data.system_info.uptime;
-                document.getElementById('load-average').textContent = data.system_info.load_average;
+                document.getElementById('uptime').textContent = data.system_info.uptime || 'N/A';
+                document.getElementById('load-average').textContent = data.system_info.load_average || 'N/A';
                 document.getElementById('system-load').textContent = data.system_info.cpu_usage + '%';
             }
+            
+            // 更新统计卡片
+            document.getElementById('total-users').textContent = data.stats?.total_users || '0';
+            document.getElementById('active-domains').textContent = data.stats?.active_domains || '0';
+            document.getElementById('mail-queue').textContent = data.stats?.mail_queue || '0';
         }
 
         // 更新服务状态
         function updateServicesStatus(services) {
             const container = document.getElementById('services-list');
             container.innerHTML = '';
+            
+            if (!services || services.length === 0) {
+                container.innerHTML = '<div class="col-12"><div class="alert alert-info">暂无服务状态信息</div></div>';
+                return;
+            }
             
             services.forEach(service => {
                 const statusClass = service.status === 'healthy' ? 'success' : 
@@ -316,7 +396,7 @@
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <h6 class="mb-1">${service.name}</h6>
-                                <small class="text-muted">${service.message}</small>
+                                <small class="text-muted">${service.message || '运行正常'}</small>
                             </div>
                             <div>
                                 <span class="status-indicator status-${service.status}"></span>
@@ -359,17 +439,20 @@
             .then(data => {
                 if (data.success) {
                     document.querySelector('.progress-bar').style.width = '100%';
-                    steps.innerHTML = '<div class="alert alert-success"><i class="fas fa-check"></i> 初始化完成！</div>';
+                    steps.innerHTML = '<div class="alert alert-success"><i class="fas fa-check"></i> 系统初始化完成！</div>';
                     button.innerHTML = '<i class="fas fa-check"></i> 初始化完成';
+                    setTimeout(() => {
+                        loadDashboardData(); // 初始化完成后刷新数据
+                    }, 1000);
                 } else {
-                    steps.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 初始化失败: ${data.message}</div>`;
+                    steps.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 初始化失败: ${data.message || '未知错误'}</div>`;
                     button.innerHTML = '<i class="fas fa-times"></i> 初始化失败';
                     button.disabled = false;
                 }
             })
             .catch(error => {
                 console.error('Init error:', error);
-                steps.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 网络错误</div>';
+                steps.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 网络连接错误，请检查服务状态</div>';
                 button.innerHTML = '<i class="fas fa-times"></i> 网络错误';
                 button.disabled = false;
             });
@@ -384,337 +467,5 @@
             }, 1000);
         });
     </script>
-</body>
-</html>
-                                <i class="fas fa-cog"></i>
-                                系统设置
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </nav>
-
-            <main role="main" class="col-md-10 ml-sm-auto px-4">
-                <div id="system-init-modal" class="modal fade" tabindex="-1" aria-hidden="true">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">系统初始化</h5>
-                            </div>
-                            <div class="modal-body">
-                                <p>检测到系统尚未初始化，请点击下方按钮进行一键初始化。</p>
-                                <div id="init-progress" class="d-none">
-                                    <div class="progress mb-3">
-                                        <div class="progress-bar" role="progressbar" style="width: 0%"></div>
-                                    </div>
-                                    <div id="init-steps"></div>
-                                </div>
-                            </div>
-                            <div class="modal-footer">
-                                <button type="button" id="init-system-btn" class="btn btn-primary">一键初始化</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="dashboard-content">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                        <h1 class="h2">系统仪表盘</h1>
-                        <div class="btn-toolbar mb-2 mb-md-0">
-                            <div class="btn-group mr-2">
-                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="refreshDashboard()">刷新</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row mb-4">
-                        <div class="col-md-3">
-                            <div class="card text-white bg-success">
-                                <div class="card-body">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-server fa-2x mr-3"></i>
-                                        <div>
-                                            <div class="card-title">系统状态</div>
-                                            <div class="card-text" id="overall-status">检测中...</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-white bg-info">
-                                <div class="card-body">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-envelope fa-2x mr-3"></i>
-                                        <div>
-                                            <div class="card-title">今日邮件</div>
-                                            <div class="card-text" id="today-mails">0</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-white bg-warning">
-                                <div class="card-body">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-users fa-2x mr-3"></i>
-                                        <div>
-                                            <div class="card-title">用户数量</div>
-                                            <div class="card-text" id="user-count">0</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="card text-white bg-secondary">
-                                <div class="card-body">
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-hdd fa-2x mr-3"></i>
-                                        <div>
-                                            <div class="card-title">磁盘使用</div>
-                                            <div class="card-text" id="disk-usage">0%</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="row mb-4">
-                        <div class="col-md-8">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h5>服务状态监控</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-striped">
-                                            <thead>
-                                                <tr>
-                                                    <th>服务名称</th>
-                                                    <th>状态</th>
-                                                    <th>端口</th>
-                                                    <th>进程ID</th>
-                                                    <th>最后检查</th>
-                                                    <th>说明</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody id="services-table">
-                                                <tr>
-                                                    <td colspan="6" class="text-center">加载中...</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="card">
-                                <div class="card-header">
-                                    <h5>系统资源</h5>
-                                </div>
-                                <div class="card-body">
-                                    <div class="mb-3">
-                                        <label class="form-label">CPU 使用率</label>
-                                        <div class="progress">
-                                            <div id="cpu-progress" class="progress-bar" role="progressbar" style="width: 0%">0%</div>
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">内存使用率</label>
-                                        <div class="progress">
-                                            <div id="memory-progress" class="progress-bar bg-warning" role="progressbar" style="width: 0%">0%</div>
-                                        </div>
-                                    </div>
-                                    <div class="mb-3">
-                                        <label class="form-label">磁盘使用率</label>
-                                        <div class="progress">
-                                            <div id="disk-progress" class="progress-bar bg-danger" role="progressbar" style="width: 0%">0%</div>
-                                        </div>
-                                    </div>
-                                    <div class="mb-2">
-                                        <strong>系统运行时间:</strong> <span id="system-uptime">-</span>
-                                    </div>
-                                    <div>
-                                        <strong>负载平均:</strong> <span id="load-average">-</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="domains-content" class="d-none">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                        <h1 class="h2">域名管理</h1>
-                        <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-domain-modal">添加域名</button>
-                        </div>
-                    </div>
-                    <div id="domains-list">加载中...</div>
-                </div>
-
-                <div id="users-content" class="d-none">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                        <h1 class="h2">用户管理</h1>
-                        <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-user-modal">添加用户</button>
-                        </div>
-                    </div>
-                    <div id="users-list">加载中...</div>
-                </div>
-
-                <div id="mail-content" class="d-none">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                        <h1 class="h2">邮件历史</h1>
-                        <div class="btn-toolbar mb-2 mb-md-0">
-                            <div class="btn-group mr-2">
-                                <input type="date" class="form-control" id="start-date">
-                                <input type="date" class="form-control" id="end-date">
-                                <button type="button" class="btn btn-outline-secondary" onclick="searchMails()">搜索</button>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="mail-history">加载中...</div>
-                </div>
-
-                <div id="certificates-content" class="d-none">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                        <h1 class="h2">证书管理</h1>
-                        <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#issue-cert-modal">签发证书</button>
-                            <button type="button" class="btn btn-secondary ml-2" onclick="renewCertificates()">续签证书</button>
-                        </div>
-                    </div>
-                    <div id="certificates-list">加载中...</div>
-                </div>
-
-                <div id="system-content" class="d-none">
-                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                        <h1 class="h2">系统设置</h1>
-                    </div>
-                    <div id="system-settings">
-                        <div class="card">
-                            <div class="card-header">
-                                <h5>系统信息</h5>
-                            </div>
-                            <div class="card-body" id="system-info">
-                                加载中...
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-        </div>
-    </div>
-
-    <div class="modal fade" id="add-domain-modal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">添加域名</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="add-domain-form">
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">域名</label>
-                            <input type="text" class="form-control" name="domain" placeholder="example.com" required>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                        <button type="submit" class="btn btn-primary">添加</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="add-user-modal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">添加用户</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="add-user-form">
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">邮箱地址</label>
-                            <input type="email" class="form-control" name="email" placeholder="user@example.com" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">用户姓名</label>
-                            <input type="text" class="form-control" name="name" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">密码</label>
-                            <input type="password" class="form-control" name="password" required minlength="6">
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">邮箱配额 (MB)</label>
-                            <input type="number" class="form-control" name="quota" value="1024">
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                        <button type="submit" class="btn btn-primary">创建</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <div class="modal fade" id="issue-cert-modal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">签发证书</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <form id="issue-cert-form">
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label class="form-label">域名</label>
-                            <input type="text" class="form-control" name="domain" placeholder="example.com" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">证书类型</label>
-                            <select class="form-control" name="type" required>
-                                <option value="single">单域名</option>
-                                <option value="wildcard">通配符</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">DNS提供商</label>
-                            <select class="form-control" name="dns_provider" required>
-                                <option value="cf">Cloudflare</option>
-                                <option value="ali">阿里云</option>
-                                <option value="dp">DNSPod</option>
-                            </select>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">API Key</label>
-                            <input type="text" class="form-control" name="api_key" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">API Secret</label>
-                            <input type="text" class="form-control" name="api_secret" required>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                        <button type="submit" class="btn btn-primary">签发</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </body>
 </html>

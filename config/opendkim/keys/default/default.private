@@ -1,3 +1,2 @@
------BEGIN PRIVATE KEY-----
-# PLACEHOLDER - DKIM key generation requires proper setup
------END PRIVATE KEY-----
+# DKIM private key placeholder
+# In production, generate with: opendkim-genkey -s default -d dev.test
