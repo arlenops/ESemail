@@ -36,6 +36,17 @@ done
 deploy_local() {
     echo "🚀 开始本地部署..."
     
+    # 拉取最新代码
+    echo "📥 拉取最新代码..."
+    if [ -d ".git" ]; then
+        git fetch origin
+        git reset --hard origin/main
+        echo "✅ 代码已更新到最新版本"
+    else
+        echo "❌ 当前目录不是Git仓库，请先clone项目到本地"
+        exit 1
+    fi
+    
     # 检查并安装Go
     if ! command -v go &> /dev/null; then
         echo "📦 安装Go..."
@@ -137,7 +148,7 @@ fi
 
 # 重新克隆最新代码
 echo "📥 克隆最新代码..."
-git clone https://github.com/your-username/ESemail.git
+git clone https://github.com/arlenops/ESemail.git
 cd ESemail
 
 # 创建环境标识文件
