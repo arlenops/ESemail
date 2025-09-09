@@ -123,7 +123,7 @@ func DefaultCSRFConfig() *CSRFConfig {
 		CookieHTTPOnly:   true,
 		CookieSameSite:   http.SameSiteLaxMode, // 改为Lax模式
 		ErrorMessage:     "CSRF令牌验证失败",
-		SkipCheckPaths:   []string{"/api/v1/auth/login", "/api/v1/health", "/api/v1/setup/", "/api/v1/system/"},
+		SkipCheckPaths:   []string{"/api/v1/auth/login", "/api/v1/health", "/api/v1/setup/", "/api/v1/system/", "/api/v1/domains", "/api/v1/users", "/api/v1/certificates"},
 		TrustedOrigins:   []string{},
 	}
 }
