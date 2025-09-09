@@ -132,6 +132,13 @@ func SetupRouter(
 			setup.GET("/dkim", NewSetupHandler(setupService).GetDKIMRecord)
 		}
 
+		// 系统初始化（无需认证）
+		system := api.Group("/system")
+		{
+			system.GET("/status", NewSystemHandler(systemService).GetSystemStatus)
+			system.POST("/init", NewSystemHandler(systemService).InitializeSystem)
+		}
+
 		// 需要认证的接口组
 		authenticated := api.Group("/")
 		authenticated.Use(AuthMiddleware(authService))
@@ -141,9 +148,7 @@ func SetupRouter(
 			authenticated.GET("/auth/me", authHandler.GetCurrentUser)
 			authenticated.POST("/auth/change-password", authHandler.ChangePassword)
 
-			// 系统管理
-			authenticated.GET("/system/status", NewSystemHandler(systemService).GetSystemStatus)
-			authenticated.POST("/system/init", NewSystemHandler(systemService).InitializeSystem)
+			// 其他需要认证的系统管理接口可以放这里
 
 			// 域名管理
 			domains := authenticated.Group("/domains")
