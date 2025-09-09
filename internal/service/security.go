@@ -180,16 +180,25 @@ func (s *SecurityService) ValidateFilePath(path string) error {
 		return errors.New("路径包含危险的上级目录引用")
 	}
 	
-	// 检查绝对路径（某些情况下需要限制）
-	if !strings.HasPrefix(path, "/var/lib/esemail/") && 
-	   !strings.HasPrefix(path, "/etc/esemail/") &&
-	   !strings.HasPrefix(path, "/etc/postfix/") &&
-	   !strings.HasPrefix(path, "/etc/dovecot/") &&
-	   !strings.HasPrefix(path, "/etc/opendkim/") &&
-	   !strings.HasPrefix(path, "/etc/ssl/mail/") &&
-	   !strings.HasPrefix(path, "/etc/rspamd/") &&
-	   !strings.HasPrefix(path, "/var/spool/postfix/") {
-		return errors.New("路径不在允许的目录范围内")
+	// 检查相对路径的合法性 
+	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "/") {
+		allowedPrefixes := []string{
+			"./data/", "./config/", "./mail/", "./logs/", "./certs/", "./acme/",
+			"/var/lib/esemail/", "/etc/esemail/", "/etc/postfix/", "/etc/dovecot/", 
+			"/etc/opendkim/", "/etc/ssl/mail/", "/etc/rspamd/", "/var/spool/postfix/",
+		}
+		
+		allowed := false
+		for _, prefix := range allowedPrefixes {
+			if strings.HasPrefix(path, prefix) {
+				allowed = true
+				break
+			}
+		}
+		
+		if !allowed {
+			return errors.New("路径不在允许的目录范围内")
+		}
 	}
 	
 	// 检查危险字符
@@ -211,7 +220,7 @@ func (s *SecurityService) GenerateDKIMKeySecure(domain string) error {
 	args := []string{
 		"-s", "default",
 		"-d", domain,
-		"-D", "/etc/opendkim/keys/default",
+		"-D", "./config/opendkim/keys/default",
 	}
 	
 	output, err := s.ExecuteSecureCommand("opendkim-genkey", args, 60*time.Second)

@@ -1,0 +1,1 @@
+default._domainkey.test.com IN TXT "v=DKIM1; k=rsa; p=PLACEHOLDER_PUBLIC_KEY"

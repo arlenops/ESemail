@@ -14,8 +14,12 @@ func main() {
 		log.Fatalf("配置加载失败: %v", err)
 	}
 
-	// 初始化存储
-	jsonStorage := storage.NewJSONStorage("/var/lib/esemail/data")
+	// 初始化存储 - 使用相对路径避免权限问题
+	dataDir := "./data"
+	if cfg.Storage.DataDir != "" {
+		dataDir = cfg.Storage.DataDir
+	}
+	jsonStorage := storage.NewJSONStorage(dataDir)
 	if err := jsonStorage.Initialize(); err != nil {
 		log.Fatalf("存储初始化失败: %v", err)
 	}

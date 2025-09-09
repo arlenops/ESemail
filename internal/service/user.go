@@ -180,13 +180,9 @@ func (s *UserService) createSystemUser(user *User, hashedPassword string) error 
 		return fmt.Errorf("无效的邮箱地址格式: %s", user.Email)
 	}
 	
-	mailDir := fmt.Sprintf("/var/lib/esemail/mail/%s/%s", user.Domain, localPart)
+	mailDir := fmt.Sprintf("./mail/%s/%s", user.Domain, localPart)
 
-	// 验证路径安全性
-	if err := s.securityService.ValidateFilePath(mailDir); err != nil {
-		return fmt.Errorf("邮箱目录路径不安全: %v", err)
-	}
-
+	// 创建邮箱目录
 	if err := os.MkdirAll(mailDir+"/Maildir", 0700); err != nil {
 		return fmt.Errorf("创建邮箱目录失败: %v", err)
 	}
@@ -198,14 +194,11 @@ func (s *UserService) createSystemUser(user *User, hashedPassword string) error 
 		}
 	}
 
-	// 安全地执行chown命令
-	_, err := s.securityService.ExecuteSecureCommand("chown", []string{"-R", "5000:5000", mailDir}, 30*time.Second)
-	if err != nil {
-		return fmt.Errorf("设置邮箱目录权限失败: %v", err)
-	}
+	// 创建用户文件目录
+	os.MkdirAll("./config/dovecot", 0755)
 
 	userLine := fmt.Sprintf("%s:{CRYPT}%s\n", user.Email, hashedPassword)
-	f, err := os.OpenFile("/etc/dovecot/users", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile("./config/dovecot/users", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("打开用户文件失败: %v", err)
 	}

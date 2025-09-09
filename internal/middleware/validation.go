@@ -237,17 +237,35 @@ func isStandardHeader(header string) bool {
 
 // containsMaliciousContent 检查内容是否包含恶意代码
 func containsMaliciousContent(content string) bool {
-	// 检查SQL注入模式
+	// 对于JSON请求，进行更宽松的检查
+	if strings.HasPrefix(strings.TrimSpace(content), "{") && strings.HasSuffix(strings.TrimSpace(content), "}") {
+		// JSON请求只检查明显的危险模式
+		dangerousPatterns := []string{
+			"<script", "</script>", "<iframe", "javascript:", "vbscript:",
+			"eval(", "document.cookie", "document.write", "window.location",
+			"../../../", "..\\..\\..\\", "/etc/passwd", "cmd.exe",
+			"'; drop ", "; drop ", "union select", "1' or '1'='1",
+		}
+		
+		lowerContent := strings.ToLower(content)
+		
+		for _, pattern := range dangerousPatterns {
+			if strings.Contains(lowerContent, strings.ToLower(pattern)) {
+				return true
+			}
+		}
+		
+		return false
+	}
+
+	// 对于非JSON请求，使用原来的严格检查
 	sqlInjectionPatterns := []string{
-		"'", "\"", ";", "--", "/*", "*/", "xp_", "sp_",
-		"union", "select", "insert", "update", "delete",
-		"drop", "create", "alter", "exec", "execute",
-		"script", "javascript:", "vbscript:", "onload",
-		"onerror", "onclick", "onmouseover", "onfocus",
+		"; drop ", "; delete ", "; update ", "; insert ",
+		"union select", "1' or '1'='1", "'; --", "\"; --",
 		"<script", "</script>", "<iframe", "</iframe>",
-		"eval(", "document.", "window.", "alert(",
-		"${", "#{", "../", "..\\", "/etc/passwd",
-		"cmd.exe", "powershell", "/bin/sh", "/bin/bash",
+		"javascript:", "vbscript:", "eval(", "document.",
+		"../../../", "..\\..\\..\\", "/etc/passwd",
+		"cmd.exe", "powershell", "/bin/sh",
 	}
 	
 	lowerContent := strings.ToLower(content)

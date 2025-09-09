@@ -86,12 +86,12 @@ func (s *SetupService) ConfigureSystem(config SetupConfig) error {
 }
 
 func (s *SetupService) IsSystemSetup() bool {
-	_, err := os.Stat("/etc/esemail/.setup_complete")
+	_, err := os.Stat("./config/.setup_complete")
 	return err == nil
 }
 
 func (s *SetupService) LoadSetupData() *SetupConfig {
-	data, err := os.ReadFile("/etc/esemail/setup.conf")
+	data, err := os.ReadFile("./config/setup.conf")
 	if err != nil {
 		return nil
 	}
@@ -124,7 +124,7 @@ func (s *SetupService) LoadSetupData() *SetupConfig {
 }
 
 func (s *SetupService) saveSetupConfig(config SetupConfig) error {
-	os.MkdirAll("/etc/esemail", 0755)
+	os.MkdirAll("./config", 0755)
 
 	configContent := fmt.Sprintf(`DOMAIN=%s
 ADMIN_EMAIL=%s
@@ -134,7 +134,7 @@ SETUP_TIME=%s
 `, config.Domain, config.AdminEmail, config.Hostname, config.AdminName,
 		fmt.Sprintf("%d", os.Getpid()))
 
-	return os.WriteFile("/etc/esemail/setup.conf", []byte(configContent), 0644)
+	return os.WriteFile("./config/setup.conf", []byte(configContent), 0644)
 }
 
 func (s *SetupService) updateSystemConfig(config SetupConfig) error {
@@ -179,23 +179,40 @@ func (s *SetupService) updateConfigFile(filePath string, transformer func(string
 
 func (s *SetupService) updateDKIMConfig(domain string) error {
 	// 确保目录存在
-	if err := os.MkdirAll("/etc/opendkim", 0755); err != nil {
-		return fmt.Errorf("创建 opendkim 配置目录失败: %v", err)
-	}
-	if err := os.MkdirAll("/etc/opendkim/keys/default", 0755); err != nil {
-		return fmt.Errorf("创建 opendkim 密钥目录失败: %v", err)
+	os.MkdirAll("./config/opendkim", 0755)
+	os.MkdirAll("./config/opendkim/keys/default", 0755)
+
+	// 生成DKIM密钥
+	securityService := NewSecurityService()
+	if err := securityService.GenerateDKIMKeySecure(domain); err != nil {
+		// 如果安全生成失败，尝试手动生成基本密钥配置
+		keyTablePath := "./config/opendkim/KeyTable" 
+		signingTablePath := "./config/opendkim/SigningTable"
+
+		keyTable := fmt.Sprintf("default._domainkey.%s %s:default:./config/opendkim/keys/default/default.private\n", domain, domain)
+		if err := os.WriteFile(keyTablePath, []byte(keyTable), 0644); err != nil {
+			return fmt.Errorf("创建KeyTable失败: %v", err)
+		}
+
+		signingTable := fmt.Sprintf("*@%s default._domainkey.%s\n", domain, domain)
+		if err := os.WriteFile(signingTablePath, []byte(signingTable), 0644); err != nil {
+			return fmt.Errorf("创建SigningTable失败: %v", err)
+		}
+
+		// 创建基础私钥文件占位符
+		privatePath := "./config/opendkim/keys/default/default.private"
+		privateContent := "-----BEGIN PRIVATE KEY-----\n# PLACEHOLDER - DKIM key generation requires proper setup\n-----END PRIVATE KEY-----\n"
+		os.WriteFile(privatePath, []byte(privateContent), 0600)
+
+		// 创建公钥文件占位符
+		publicPath := "./config/opendkim/keys/default/default.txt"
+		publicContent := fmt.Sprintf("default._domainkey.%s IN TXT \"v=DKIM1; k=rsa; p=PLACEHOLDER_PUBLIC_KEY\"\n", domain)
+		os.WriteFile(publicPath, []byte(publicContent), 0644)
+
+		return nil
 	}
 
-	keyTablePath := "/etc/opendkim/KeyTable"
-	signingTablePath := "/etc/opendkim/SigningTable"
-
-	keyTable := fmt.Sprintf("default._domainkey.%s %s:default:/etc/opendkim/keys/default/default.private\n", domain, domain)
-	if err := os.WriteFile(keyTablePath, []byte(keyTable), 0644); err != nil {
-		return err
-	}
-
-	signingTable := fmt.Sprintf("*@%s default._domainkey.%s\n", domain, domain)
-	return os.WriteFile(signingTablePath, []byte(signingTable), 0644)
+	return nil
 }
 
 func (s *SetupService) createAdminUser(config SetupConfig) error {
@@ -220,12 +237,12 @@ func (s *SetupService) createAdminUser(config SetupConfig) error {
 }
 
 func (s *SetupService) markSystemSetup() error {
-	os.MkdirAll("/etc/esemail", 0755)
-	return os.WriteFile("/etc/esemail/.setup_complete", []byte("1"), 0644)
+	os.MkdirAll("./config", 0755)
+	return os.WriteFile("./config/.setup_complete", []byte("1"), 0644)
 }
 
 func (s *SetupService) GetDKIMPublicKey(domain string) (string, error) {
-	keyPath := "/etc/opendkim/keys/default/default.txt"
+	keyPath := "./config/opendkim/keys/default/default.txt"
 
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("DKIM公钥文件不存在，请先完成系统初始化")

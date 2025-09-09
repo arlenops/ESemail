@@ -1,0 +1,1 @@
+default._domainkey.test.com test.com:default:./config/opendkim/keys/default/default.private

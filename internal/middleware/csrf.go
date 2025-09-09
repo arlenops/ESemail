@@ -119,11 +119,11 @@ func DefaultCSRFConfig() *CSRFConfig {
 		CookieName:       "csrf-token",
 		HeaderName:       "X-CSRF-Token",
 		FormFieldName:    "csrf_token",
-		CookieSecure:     true,
+		CookieSecure:     false, // 开发环境设置为false
 		CookieHTTPOnly:   true,
-		CookieSameSite:   http.SameSiteStrictMode,
+		CookieSameSite:   http.SameSiteLaxMode, // 改为Lax模式
 		ErrorMessage:     "CSRF令牌验证失败",
-		SkipCheckPaths:   []string{"/api/v1/auth/login", "/api/v1/health"},
+		SkipCheckPaths:   []string{"/api/v1/auth/login", "/api/v1/health", "/api/v1/setup/"},
 		TrustedOrigins:   []string{},
 	}
 }

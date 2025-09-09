@@ -10,6 +10,11 @@ type Config struct {
 	Database DatabaseConfig `yaml:"database"`
 	Mail     MailConfig     `yaml:"mail"`
 	Cert     CertConfig     `yaml:"cert"`
+	Storage  StorageConfig  `yaml:"storage"`
+}
+
+type StorageConfig struct {
+	DataDir string `yaml:"data_dir"`
 }
 
 type ServerConfig struct {
@@ -42,17 +47,20 @@ func Load() (*Config, error) {
 			Mode: "release",
 		},
 		Database: DatabaseConfig{
-			Path: "/var/lib/esemail/db",
+			Path: "./db",
 		},
 		Mail: MailConfig{
-			DataPath: "/var/lib/esemail/mail",
-			LogPath:  "/var/log/mail",
+			DataPath: "./mail",
+			LogPath:  "./logs",
 			Domains:  []string{},
 		},
 		Cert: CertConfig{
-			AcmePath:  "/var/lib/esemail/acme",
-			CertPath:  "/etc/ssl/mail",
+			AcmePath:  "./acme",
+			CertPath:  "./certs",
 			AutoRenew: true,
+		},
+		Storage: StorageConfig{
+			DataDir: "./data",
 		},
 	}
 
