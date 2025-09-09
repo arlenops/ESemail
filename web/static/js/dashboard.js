@@ -4,6 +4,8 @@ let healthData = null;
 document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     checkSystemStatus();
+    // 首次加载时获取CSRF令牌
+    fetchCSRFToken();
     setInterval(refreshDashboard, 30000);
 });
 
@@ -486,12 +488,61 @@ async function loadSystemSettings() {
 // 获取认证头
 function getAuthHeaders() {
     const token = localStorage.getItem('auth_token');
-    return token ? {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + token
-    } : {
+    const csrfToken = getCSRFToken();
+    
+    const headers = {
         'Content-Type': 'application/json'
     };
+    
+    if (token) {
+        headers['Authorization'] = 'Bearer ' + token;
+    }
+    
+    if (csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+    }
+    
+    return headers;
+}
+
+// 获取CSRF令牌
+async function fetchCSRFToken() {
+    try {
+        const response = await fetch('/api/v1/csrf-token');
+        if (response.ok) {
+            const data = await response.json();
+            // 存储到sessionStorage
+            sessionStorage.setItem('csrf-token', data.csrf_token);
+        }
+    } catch (error) {
+        console.error('获取CSRF令牌失败:', error);
+    }
+}
+
+// 更新getCSRFToken函数以从sessionStorage获取
+function getCSRFToken() {
+    // 首先从sessionStorage获取
+    const sessionToken = sessionStorage.getItem('csrf-token');
+    if (sessionToken) {
+        return sessionToken;
+    }
+    
+    // 从meta标签获取
+    const metaToken = document.querySelector('meta[name="csrf-token"]');
+    if (metaToken) {
+        return metaToken.getAttribute('content');
+    }
+    
+    // 从cookie获取
+    const cookies = document.cookie.split(';');
+    for (let cookie of cookies) {
+        const [name, value] = cookie.trim().split('=');
+        if (name === 'csrf-token') {
+            return value;
+        }
+    }
+    
+    return null;
 }
 
 async function addDomain(e) {

@@ -69,7 +69,8 @@ func SetupRouter(
 	
 	// CSRF保护配置
 	csrfConfig := middleware.DefaultCSRFConfig()
-	csrfConfig.TrustedOrigins = []string{"http://localhost:8686", "https://localhost:8686"}
+	// 清空TrustedOrigins以允许所有来源（生产环境需要配置具体域名）
+	csrfConfig.TrustedOrigins = []string{}
 	r.Use(middleware.CSRFMiddleware(csrfConfig))
 	
 	// 全局错误恢复
