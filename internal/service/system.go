@@ -539,42 +539,39 @@ scache    unix  -       -       y       -       1       scache
 }
 
 func (s *SystemService) generateDovecotConfig(setupData *SetupConfig) string {
-	return fmt.Sprintf(`protocols = imap pop3
-listen = *, ::
-base_dir = /var/run/dovecot/
-instance_name = dovecot
+	return `# Dovecot 配置文件
+protocols = imap pop3 lmtp
+listen = *
 
-# SSL 配置 - 初始化时可选，证书就绪后可设为required
+# SSL 配置 - 使用系统默认证书
 ssl = yes
 ssl_cert = </etc/ssl/certs/ssl-cert-snakeoil.pem
 ssl_key = </etc/ssl/private/ssl-cert-snakeoil.key
-ssl_protocols = !SSLv2 !SSLv3
 
 # 邮件存储配置
-mail_location = maildir:/var/mail/vhosts/%%d/%%n/Maildir
-mail_uid = 5000
-mail_gid = 5000
+mail_location = maildir:/var/mail/vhosts/%d/%n
+mail_uid = vmail
+mail_gid = vmail
 
-# 创建邮件存储目录
-first_valid_uid = 5000
-last_valid_uid = 5000
-first_valid_gid = 5000  
-last_valid_gid = 5000
-
+# 认证配置
 auth_mechanisms = plain login
+
+# 简单的密码数据库配置
 passdb {
   driver = passwd-file
-  args = scheme=CRYPT username_format=%%u /etc/dovecot/users
-}
-userdb {
-  driver = static
-  args = uid=5000 gid=5000 home=/var/mail/vhosts/%%d/%%n
+  args = scheme=PLAIN username_format=%u /etc/dovecot/users
 }
 
+# 用户数据库配置
+userdb {
+  driver = static
+  args = uid=vmail gid=vmail home=/var/mail/vhosts/%d/%n
+}
+
+# IMAP 服务配置
 service imap-login {
   inet_listener imap {
     port = 143
-    ssl = no
   }
   inet_listener imaps {
     port = 993
@@ -582,10 +579,10 @@ service imap-login {
   }
 }
 
+# POP3 服务配置
 service pop3-login {
   inet_listener pop3 {
     port = 110
-    ssl = no
   }
   inet_listener pop3s {
     port = 995
@@ -593,9 +590,10 @@ service pop3-login {
   }
 }
 
+# 简化的 namespace 配置
 namespace inbox {
   inbox = yes
-  location = 
+  location =
   mailbox Drafts {
     special_use = \Drafts
   }
@@ -611,8 +609,7 @@ namespace inbox {
   mailbox Trash {
     special_use = \Trash
   }
-}
-`, setupData.Domain, setupData.Domain)
+}`
 }
 
 func (s *SystemService) generateRspamdConfig() string {
