@@ -45,6 +45,7 @@ function switchSection(section) {
             break;
         case 'users':
             loadUsers();
+            loadDomainsForUserForm();
             break;
         case 'mail':
             loadMailHistory();
@@ -232,9 +233,31 @@ function getStatusBadge(status) {
     return badges[status] || badges['unknown'];
 }
 
+// 加载域名到用户表单
+async function loadDomainsForUserForm() {
+    try {
+        const response = await fetch('/api/v1/domains', {
+            headers: getAuthHeaders()
+        });
+        const domains = await response.json();
+        
+        const domainSelect = document.getElementById('user-domain');
+        if (domainSelect) {
+            domainSelect.innerHTML = '<option value="">选择域名</option>';
+            domains.forEach(domain => {
+                domainSelect.innerHTML += `<option value="${domain.domain}">${domain.domain}</option>`;
+            });
+        }
+    } catch (error) {
+        console.error('加载域名失败:', error);
+    }
+}
+
 async function loadDomains() {
     try {
-        const response = await fetch('/api/v1/domains');
+        const response = await fetch('/api/v1/domains', {
+            headers: getAuthHeaders()
+        });
         const domains = await response.json();
         
         let html = '<div class="row">';
@@ -264,7 +287,9 @@ async function loadDomains() {
 
 async function loadUsers() {
     try {
-        const response = await fetch('/api/v1/users');
+        const response = await fetch('/api/v1/users', {
+            headers: getAuthHeaders()
+        });
         const users = await response.json();
         
         let html = `
@@ -379,7 +404,9 @@ async function loadMailHistory() {
 
 async function loadCertificates() {
     try {
-        const response = await fetch('/api/v1/certificates');
+        const response = await fetch('/api/v1/certificates', {
+            headers: getAuthHeaders()
+        });
         const certificates = await response.json();
         
         let html = `
@@ -456,6 +483,17 @@ async function loadSystemSettings() {
     }
 }
 
+// 获取认证头
+function getAuthHeaders() {
+    const token = localStorage.getItem('auth_token');
+    return token ? {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + token
+    } : {
+        'Content-Type': 'application/json'
+    };
+}
+
 async function addDomain(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -464,7 +502,7 @@ async function addDomain(e) {
     try {
         const response = await fetch('/api/v1/domains', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify(data)
         });
         
@@ -485,12 +523,22 @@ async function addUser(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
+    
+    // 组合完整的邮箱地址
+    if (data.email_local && data.domain) {
+        data.email = data.email_local + '@' + data.domain;
+        delete data.email_local;
+    } else {
+        alert('请选择域名和填写用户名');
+        return;
+    }
+    
     data.quota = parseInt(data.quota) * 1024 * 1024;
     
     try {
         const response = await fetch('/api/v1/users', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify(data)
         });
         
@@ -515,7 +563,7 @@ async function issueCertificate(e) {
     try {
         const response = await fetch('/api/v1/certificates/issue', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getAuthHeaders(),
             body: JSON.stringify(data)
         });
         
@@ -534,7 +582,10 @@ async function issueCertificate(e) {
 
 async function renewCertificates() {
     try {
-        const response = await fetch('/api/v1/certificates/renew', { method: 'POST' });
+        const response = await fetch('/api/v1/certificates/renew', { 
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
         if (response.ok) {
             alert('证书续签成功');
             loadCertificates();

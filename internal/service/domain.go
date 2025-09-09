@@ -1,7 +1,11 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -12,11 +16,13 @@ type DomainService struct{
 }
 
 type Domain struct {
+	Domain     string            `json:"domain"`
 	Name       string            `json:"name"`
 	Active     bool              `json:"active"`
 	DNSRecords map[string]string `json:"dns_records"`
 	DKIMKey    string            `json:"dkim_key"`
 	Status     string            `json:"status"`
+	CreatedAt  time.Time         `json:"created_at"`
 }
 
 func NewDomainService() *DomainService {
@@ -43,27 +49,66 @@ func (s *DomainService) IsDomainManaged(domain string) bool {
 }
 
 func (s *DomainService) ListDomains() ([]Domain, error) {
-	domains := []Domain{
-		{
-			Name:   "example.com",
-			Active: true,
-			Status: "active",
-			DNSRecords: map[string]string{
-				"MX":    "10 mail.example.com",
-				"SPF":   "v=spf1 mx ~all",
-				"DMARC": "v=DMARC1; p=none; rua=mailto:dmarc@example.com",
-			},
-		},
+	domains, err := s.loadDomains()
+	if err != nil {
+		log.Printf("加载域名失败: %v", err)
+		return []Domain{}, nil // 返回空数组而不是错误
 	}
 	return domains, nil
 }
 
 func (s *DomainService) AddDomain(domain string) error {
-	return nil
+	// 验证域名格式
+	if err := s.securityService.ValidateDomain(domain); err != nil {
+		return fmt.Errorf("域名格式不正确: %v", err)
+	}
+	
+	// 加载现有域名
+	domains, err := s.loadDomains()
+	if err != nil {
+		domains = []Domain{} // 如果加载失败，创建新的列表
+	}
+	
+	// 检查域名是否已存在
+	for _, d := range domains {
+		if d.Domain == domain {
+			return fmt.Errorf("域名 %s 已存在", domain)
+		}
+	}
+	
+	// 添加新域名
+	newDomain := Domain{
+		Domain:    domain,
+		Name:      domain,
+		Active:    true,
+		Status:    "active",
+		CreatedAt: time.Now(),
+		DNSRecords: map[string]string{
+			"MX":    fmt.Sprintf("10 mail.%s", domain),
+			"SPF":   "v=spf1 mx ~all",
+			"DMARC": fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc@%s", domain),
+		},
+	}
+	
+	domains = append(domains, newDomain)
+	return s.saveDomains(domains)
 }
 
 func (s *DomainService) DeleteDomain(domain string) error {
-	return nil
+	domains, err := s.loadDomains()
+	if err != nil {
+		return fmt.Errorf("加载域名失败: %v", err)
+	}
+	
+	// 查找并删除域名
+	for i, d := range domains {
+		if d.Domain == domain {
+			domains = append(domains[:i], domains[i+1:]...)
+			return s.saveDomains(domains)
+		}
+	}
+	
+	return fmt.Errorf("域名 %s 不存在", domain)
 }
 
 func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
@@ -104,4 +149,53 @@ func (s *DomainService) checkDNSRecord(recordType, domain string) string {
 
 func (s *DomainService) getDKIMRecord(domain string) string {
 	return "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."
+}
+
+// loadDomains 加载域名数据
+func (s *DomainService) loadDomains() ([]Domain, error) {
+	domainsFile := "./data/domains.json"
+	
+	// 确保数据目录存在
+	if err := os.MkdirAll(filepath.Dir(domainsFile), 0755); err != nil {
+		return nil, fmt.Errorf("创建数据目录失败: %v", err)
+	}
+	
+	// 如果文件不存在，返回空列表
+	if _, err := os.Stat(domainsFile); os.IsNotExist(err) {
+		return []Domain{}, nil
+	}
+	
+	data, err := os.ReadFile(domainsFile)
+	if err != nil {
+		return nil, fmt.Errorf("读取域名文件失败: %v", err)
+	}
+	
+	var domains []Domain
+	if err := json.Unmarshal(data, &domains); err != nil {
+		return nil, fmt.Errorf("解析域名文件失败: %v", err)
+	}
+	
+	return domains, nil
+}
+
+// saveDomains 保存域名数据
+func (s *DomainService) saveDomains(domains []Domain) error {
+	domainsFile := "./data/domains.json"
+	
+	// 确保数据目录存在
+	if err := os.MkdirAll(filepath.Dir(domainsFile), 0755); err != nil {
+		return fmt.Errorf("创建数据目录失败: %v", err)
+	}
+	
+	data, err := json.MarshalIndent(domains, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化域名数据失败: %v", err)
+	}
+	
+	if err := os.WriteFile(domainsFile, data, 0644); err != nil {
+		return fmt.Errorf("保存域名文件失败: %v", err)
+	}
+	
+	log.Printf("已保存 %d 个域名到文件", len(domains))
+	return nil
 }
