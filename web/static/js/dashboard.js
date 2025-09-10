@@ -544,7 +544,13 @@ async function addDomain(e) {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
     
+    // 确保data只包含domain字段，符合后端API的期望
+    const requestData = {
+        domain: data.domain
+    };
+    
     const headers = getAuthHeaders();
+    console.log('发送域名添加请求，数据:', requestData);
     console.log('发送域名添加请求，headers:', headers);
     console.log('CSRF令牌:', getCSRFToken());
     
@@ -552,13 +558,19 @@ async function addDomain(e) {
         const response = await fetch('/api/v1/domains', {
             method: 'POST',
             headers: headers,
-            body: JSON.stringify(data)
+            body: JSON.stringify(requestData)
         });
         
         if (response.ok) {
-            alert('域名添加成功');
             bootstrap.Modal.getInstance(document.getElementById('add-domain-modal')).hide();
+            // 清空表单
+            document.getElementById('add-domain-form').reset();
+            // 重新加载域名列表
             loadDomains();
+            // 显示DNS设置引导
+            setTimeout(() => {
+                showDNSSetupGuide(requestData.domain);
+            }, 500);
         } else {
             const error = await response.json();
             alert('添加失败: ' + error.error);
@@ -651,4 +663,146 @@ async function renewCertificates() {
 
 async function downloadEML(id) {
     window.open(`/api/v1/mail/history/${id}/download`, '_blank');
+}
+
+// DNS设置引导
+async function showDNSSetupGuide(domain) {
+    try {
+        // 获取DNS记录建议
+        const response = await fetch(`/api/v1/domains/${domain}/dns`);
+        const records = await response.json();
+        
+        let html = `
+            <div class="modal fade" id="dns-setup-guide-modal" tabindex="-1">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-check-circle"></i> 域名添加成功！请配置DNS记录
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-success">
+                                <h6><i class="fas fa-checkmark-circle"></i> 域名 ${domain} 已成功添加到邮件系统！</h6>
+                                <p class="mb-0">现在您需要在DNS服务商处配置以下记录以启用邮件服务。</p>
+                            </div>
+                            
+                            <div class="row mb-4">
+                                <div class="col-md-8">
+                                    <h6><i class="fas fa-cog"></i> DNS记录配置表</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered table-striped">
+                                            <thead class="table-dark">
+                                                <tr>
+                                                    <th>记录类型</th>
+                                                    <th>主机记录</th>
+                                                    <th>记录值</th>
+                                                    <th>TTL</th>
+                                                    <th>优先级</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+        `;
+        
+        records.forEach(record => {
+            const priority = record.type === 'MX' ? '10' : '-';
+            html += `
+                <tr>
+                    <td><code class="text-primary">${record.type}</code></td>
+                    <td><code>${record.name}</code></td>
+                    <td><code class="text-break">${record.value}</code></td>
+                    <td>${record.ttl || 600}</td>
+                    <td>${priority}</td>
+                </tr>
+            `;
+        });
+        
+        html += `
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6><i class="fas fa-lightbulb"></i> 配置说明</h6>
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <ul class="list-unstyled">
+                                                <li class="mb-2">
+                                                    <strong>MX记录：</strong><br>
+                                                    <small class="text-muted">指向邮件服务器，用于接收邮件</small>
+                                                </li>
+                                                <li class="mb-2">
+                                                    <strong>A记录：</strong><br>
+                                                    <small class="text-muted">邮件服务器的IP地址</small>
+                                                </li>
+                                                <li class="mb-2">
+                                                    <strong>TXT记录：</strong><br>
+                                                    <small class="text-muted">SPF/DKIM/DMARC验证记录</small>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="alert alert-info">
+                                <h6><i class="fas fa-info-circle"></i> 重要提示</h6>
+                                <ul class="mb-0">
+                                    <li>DNS记录生效通常需要几分钟到24小时</li>
+                                    <li>配置完成后，请使用"DNS记录"按钮检查配置状态</li>
+                                    <li>所有记录配置正确后，邮件服务才能正常工作</li>
+                                    <li>如需帮助，请查看DNS服务商的配置文档</li>
+                                </ul>
+                            </div>
+                            
+                            <div class="alert alert-warning">
+                                <h6><i class="fas fa-exclamation-triangle"></i> 常见DNS服务商配置指南</h6>
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <strong>阿里云DNS：</strong><br>
+                                        <small>进入域名控制台 → DNS管理 → 添加记录</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>腾讯云DNS：</strong><br>
+                                        <small>进入DNS解析控制台 → 记录管理 → 添加记录</small>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Cloudflare：</strong><br>
+                                        <small>进入Dashboard → DNS → Add record</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times"></i> 稍后配置
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="viewDNSRecords('${domain}')">
+                                <i class="fas fa-eye"></i> 检查DNS状态
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // 移除旧的模态框
+        const oldModal = document.getElementById('dns-setup-guide-modal');
+        if (oldModal) {
+            oldModal.remove();
+        }
+        
+        // 添加新的模态框
+        document.body.insertAdjacentHTML('beforeend', html);
+        
+        // 显示模态框
+        const modal = new bootstrap.Modal(document.getElementById('dns-setup-guide-modal'));
+        modal.show();
+        
+    } catch (error) {
+        console.error('获取DNS设置引导失败:', error);
+        // 如果获取失败，至少显示一个成功提示
+        alert(`域名 ${domain} 添加成功！请在域名管理页面查看DNS配置要求。`);
+    }
 }

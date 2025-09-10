@@ -13,6 +13,7 @@ import (
 type DomainService struct{
 	securityService *SecurityService
 	dnsService     *DNSService
+	dataDir        string
 }
 
 type Domain struct {
@@ -29,6 +30,15 @@ func NewDomainService() *DomainService {
 	return &DomainService{
 		securityService: NewSecurityService(),
 		dnsService:     NewDNSService(),
+		dataDir:        "./data", // 默认数据目录
+	}
+}
+
+func NewDomainServiceWithConfig(dataDir string) *DomainService {
+	return &DomainService{
+		securityService: NewSecurityService(),
+		dnsService:     NewDNSService(),
+		dataDir:        dataDir,
 	}
 }
 
@@ -153,7 +163,7 @@ func (s *DomainService) getDKIMRecord(domain string) string {
 
 // loadDomains 加载域名数据
 func (s *DomainService) loadDomains() ([]Domain, error) {
-	domainsFile := "./data/domains.json"
+	domainsFile := filepath.Join(s.dataDir, "domains.json")
 	
 	// 确保数据目录存在
 	if err := os.MkdirAll(filepath.Dir(domainsFile), 0755); err != nil {
@@ -180,7 +190,7 @@ func (s *DomainService) loadDomains() ([]Domain, error) {
 
 // saveDomains 保存域名数据
 func (s *DomainService) saveDomains(domains []Domain) error {
-	domainsFile := "./data/domains.json"
+	domainsFile := filepath.Join(s.dataDir, "domains.json")
 	
 	// 确保数据目录存在
 	if err := os.MkdirAll(filepath.Dir(domainsFile), 0755); err != nil {

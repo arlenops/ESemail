@@ -29,7 +29,7 @@ func main() {
 	authService := service.NewAuthService()
 	healthService := service.NewHealthService()
 	systemService := service.NewSystemService()
-	domainService := service.NewDomainService()
+	domainService := service.NewDomainServiceWithConfig(dataDir)
 	userService := service.NewUserService()
 	certService := service.NewCertService()
 	setupService := service.NewSetupService()

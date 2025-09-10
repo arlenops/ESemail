@@ -194,15 +194,31 @@
                     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
                         <h1 class="h2">域名管理</h1>
                         <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-domain-modal">
+                            <button type="button" class="btn btn-success" onclick="refreshDomains()">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                            <button type="button" class="btn btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#add-domain-modal">
                                 <i class="fas fa-plus"></i> 添加域名
                             </button>
                         </div>
                     </div>
-                    <div class="empty-state">
+                    
+                    <!-- 域名列表容器 -->
+                    <div id="domains-list">
+                        <div class="text-center py-4">
+                            <div class="loading-spinner mb-3"></div>
+                            <p class="text-muted">正在加载域名列表...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 空状态提示 -->
+                    <div id="domains-empty-state" class="empty-state" style="display: none;">
                         <i class="fas fa-globe"></i>
-                        <h3>域名管理</h3>
-                        <p>管理您的邮件域名配置，设置DNS记录和域名验证</p>
+                        <h3>暂无域名</h3>
+                        <p>点击"添加域名"按钮开始配置您的第一个邮件域名</p>
+                        <button type="button" class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#add-domain-modal">
+                            <i class="fas fa-plus"></i> 添加域名
+                        </button>
                     </div>
                 </div>
 
@@ -576,9 +592,11 @@
                         target.classList.add('fade-in-up');
                     }
                     
-                    // 如果是仪表板，刷新数据
+                    // 根据不同页面加载对应数据
                     if (targetSection === 'dashboard-section') {
                         loadDashboardData();
+                    } else if (targetSection === 'domains-section') {
+                        loadDomains();
                     }
                 });
             });
@@ -719,6 +737,184 @@
                 this.innerHTML = '<i class="fas fa-sync-alt"></i> 刷新';
             }, 1000);
         });
+
+        // 域名管理相关函数
+        async function loadDomains() {
+            const domainsListContainer = document.getElementById('domains-list');
+            const emptyStateContainer = document.getElementById('domains-empty-state');
+            
+            try {
+                const response = await apiRequest('/api/v1/domains');
+                const domains = await response.json();
+                
+                if (domains && domains.length > 0) {
+                    emptyStateContainer.style.display = 'none';
+                    domainsListContainer.style.display = 'block';
+                    
+                    let html = '<div class="row">';
+                    domains.forEach(domain => {
+                        const statusBadge = domain.active ? 
+                            '<span class="badge bg-success">活跃</span>' : 
+                            '<span class="badge bg-secondary">禁用</span>';
+                            
+                        html += `
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">${domain.domain || domain.name}</h6>
+                                        ${statusBadge}
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small mb-2">状态: ${domain.status || 'active'}</p>
+                                        <p class="text-muted small mb-3">创建时间: ${new Date(domain.created_at).toLocaleDateString()}</p>
+                                        <div class="btn-group w-100" role="group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="viewDNSRecords('${domain.domain || domain.name}')">
+                                                <i class="fas fa-eye"></i> DNS记录
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="deleteDomain('${domain.domain || domain.name}')">
+                                                <i class="fas fa-trash"></i> 删除
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    domainsListContainer.innerHTML = html;
+                } else {
+                    domainsListContainer.style.display = 'none';
+                    emptyStateContainer.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('加载域名失败:', error);
+                domainsListContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        加载域名列表失败：${error.message}
+                        <button class="btn btn-outline-warning btn-sm ms-2" onclick="loadDomains()">重试</button>
+                    </div>
+                `;
+            }
+        }
+
+        // 刷新域名列表
+        function refreshDomains() {
+            loadDomains();
+        }
+
+        // 查看DNS记录
+        async function viewDNSRecords(domain) {
+            try {
+                const response = await apiRequest(`/api/v1/domains/${domain}/dns`);
+                const records = await response.json();
+                
+                let html = `
+                    <div class="modal fade" id="dns-records-modal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">DNS记录 - ${domain}</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="alert alert-info">
+                                        <i class="fas fa-info-circle"></i>
+                                        请在您的DNS服务商处添加以下记录以启用邮件服务
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-bordered">
+                                            <thead>
+                                                <tr>
+                                                    <th>类型</th>
+                                                    <th>名称</th>
+                                                    <th>值</th>
+                                                    <th>TTL</th>
+                                                    <th>状态</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                `;
+                
+                records.forEach(record => {
+                    const statusBadge = record.status === 'found' ? 
+                        '<span class="badge bg-success">已配置</span>' : 
+                        record.status === 'missing' ? 
+                        '<span class="badge bg-warning">未配置</span>' : 
+                        '<span class="badge bg-danger">错误</span>';
+                        
+                    html += `
+                        <tr>
+                            <td><code>${record.type}</code></td>
+                            <td><code>${record.name}</code></td>
+                            <td><code class="text-break">${record.value}</code></td>
+                            <td>${record.ttl}</td>
+                            <td>${statusBadge}</td>
+                        </tr>
+                    `;
+                });
+                
+                html += `
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                                    <button type="button" class="btn btn-primary" onclick="recheckDNS('${domain}')">重新检查</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // 移除旧的模态框
+                const oldModal = document.getElementById('dns-records-modal');
+                if (oldModal) {
+                    oldModal.remove();
+                }
+                
+                // 添加新的模态框
+                document.body.insertAdjacentHTML('beforeend', html);
+                
+                // 显示模态框
+                const modal = new bootstrap.Modal(document.getElementById('dns-records-modal'));
+                modal.show();
+                
+            } catch (error) {
+                console.error('获取DNS记录失败:', error);
+                alert('获取DNS记录失败: ' + error.message);
+            }
+        }
+
+        // 重新检查DNS
+        function recheckDNS(domain) {
+            alert('DNS检查功能将在后续版本中实现');
+        }
+
+        // 删除域名
+        async function deleteDomain(domain) {
+            if (!confirm(`确定要删除域名 ${domain} 吗？此操作不可撤销。`)) {
+                return;
+            }
+
+            try {
+                const response = await apiRequest(`/api/v1/domains/${domain}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    alert('域名删除成功');
+                    loadDomains(); // 重新加载域名列表
+                } else {
+                    const error = await response.json();
+                    alert('删除失败: ' + error.error);
+                }
+            } catch (error) {
+                console.error('删除域名失败:', error);
+                alert('删除失败: ' + error.message);
+            }
+        }
     </script>
 
     <!-- 添加域名模态框 -->
@@ -734,10 +930,7 @@
                         <div class="mb-3">
                             <label for="domain-name" class="form-label">域名</label>
                             <input type="text" class="form-control" id="domain-name" name="domain" required placeholder="example.com">
-                        </div>
-                        <div class="mb-3">
-                            <label for="domain-description" class="form-label">描述</label>
-                            <textarea class="form-control" id="domain-description" name="description" rows="3" placeholder="域名用途说明"></textarea>
+                            <div class="form-text">请输入完整的域名，如：example.com</div>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="domain-active" name="active" checked>
@@ -747,7 +940,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                    <button type="submit" form="add-domain-form" class="btn btn-primary">添加域名</button>
+                    <button type="submit" form="add-domain-form" class="btn btn-primary" id="add-domain-submit">添加域名</button>
                 </div>
             </div>
         </div>
