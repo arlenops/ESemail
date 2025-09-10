@@ -95,7 +95,7 @@ func SetupRouter(
 	r.Use(middleware.CSRFMiddleware(csrfConfig))
 	
 	// 工作流程控制中间件
-	r.Use(middleware.WorkflowRedirectMiddleware(workflowService))
+	// r.Use(middleware.WorkflowRedirectMiddleware(workflowService)) // 临时禁用重定向
 	r.Use(middleware.WorkflowMiddleware(workflowService))
 	
 	// 全局错误恢复
