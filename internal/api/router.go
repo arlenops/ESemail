@@ -157,7 +157,7 @@ func SetupRouter(
 		// 计算功能解锁状态
 		unlockStatus := map[string]bool{
 			"system_init":    initStatus["is_initialized"].(bool),
-			"domain_config":  containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2,
+			"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep > 1),
 			"dns_verified":   containsInt(state.CompletedSteps, 3) || state.CurrentStep > 3,
 			"ssl_config":     containsInt(state.CompletedSteps, 4) || state.CurrentStep > 4,
 			"user_mgmt":      containsInt(state.CompletedSteps, 5) || state.CurrentStep > 5,
@@ -276,9 +276,10 @@ func SetupRouter(
 		// 系统初始化（无需认证）
 		system := api.Group("/system")
 		{
-			system.GET("/status", NewSystemHandler(systemService).GetSystemStatus)
-			system.GET("/init-status", NewSystemHandler(systemService).GetInitializationStatus)
-			system.POST("/init", NewSystemHandler(systemService).InitializeSystem)
+			systemHandler := NewSystemHandler(systemService, workflowService)
+			system.GET("/status", systemHandler.GetSystemStatus)
+			system.GET("/init-status", systemHandler.GetInitializationStatus)
+			system.POST("/init", systemHandler.InitializeSystem)
 		}
 
 		// 环境检查（无需认证）

@@ -926,19 +926,12 @@
                     steps.innerHTML = '<div class="alert alert-success"><i class="fas fa-check"></i> 系统初始化完成！</div>';
                     button.innerHTML = '<i class="fas fa-check"></i> 初始化完成';
                     setTimeout(() => {
-                        loadDashboardData(); // 初始化完成后刷新数据
-                        // 关闭初始化弹窗（如果打开）
-                        const initModal = document.getElementById('system-init-modal');
-                        if (initModal) {
-                            const modalInstance = bootstrap.Modal.getInstance(initModal);
-                            if (modalInstance) {
-                                modalInstance.hide();
-                            }
-                        }
-                    }, 1000);
+                        // 初始化完成后刷新整个页面以更新状态
+                        window.location.reload();
+                    }, 2000);
                 } else {
-                    steps.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 初始化失败: ${data.message || '未知错误'}</div>`;
-                    button.innerHTML = '<i class="fas fa-times"></i> 初始化失败';
+                    steps.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times"></i> 初始化失败: ' + (data.message || '未知错误') + '</div>';
+                    button.innerHTML = '<i class="fas fa-play"></i> 重试初始化';
                     button.disabled = false;
                 }
             })
@@ -1232,8 +1225,8 @@
                         if (modalInstance) {
                             modalInstance.hide();
                         }
-                        // 刷新页面数据
-                        loadDashboardData();
+                        // 刷新整个页面以更新状态
+                        window.location.reload();
                     }, 2000);
                 } else {
                     if (stepsContainer) {
