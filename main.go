@@ -36,6 +36,9 @@ func main() {
 	environmentService := service.NewEnvironmentService()
 	dnsService := service.NewDNSService()
 	
+	// 初始化工作流服务
+	workflowService := service.NewWorkflowService(dataDir)
+	
 	// 初始化邮件服务器
 	mailServerConfig := &service.MailServerConfig{
 		Domain:         "localhost", // 默认域名，应该从配置中获取
@@ -63,6 +66,15 @@ func main() {
 		log.Println("邮件服务器启动成功")
 	}
 	
+	// 为工作流服务设置服务引用
+	workflowService.SetServiceReferences(
+		systemService,
+		domainService,
+		userService,
+		certService,
+		mailServer,
+	)
+	
 	router := api.SetupRouter(
 		cfg, 
 		healthService, 
@@ -76,6 +88,7 @@ func main() {
 		validationService,
 		environmentService,
 		dnsService,
+		workflowService,
 	)
 
 	log.Printf("ESemail 控制面启动在端口 :%s", cfg.Server.Port)

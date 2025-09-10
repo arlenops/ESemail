@@ -54,6 +54,7 @@ func SetupRouter(
 	validationService *service.ValidationService,
 	environmentService *service.EnvironmentService,
 	dnsService *service.DNSService,
+	workflowService *service.WorkflowService,
 ) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -72,6 +73,10 @@ func SetupRouter(
 	// 清空TrustedOrigins以允许所有来源（生产环境需要配置具体域名）
 	csrfConfig.TrustedOrigins = []string{}
 	r.Use(middleware.CSRFMiddleware(csrfConfig))
+	
+	// 工作流程控制中间件
+	r.Use(middleware.WorkflowRedirectMiddleware(workflowService))
+	r.Use(middleware.WorkflowMiddleware(workflowService))
 	
 	// 全局错误恢复
 	r.Use(gin.Recovery())
@@ -116,6 +121,20 @@ func SetupRouter(
 		})
 	})
 
+	// 工作流引导页面
+	r.GET("/workflow", func(c *gin.Context) {
+		state := workflowService.GetCurrentState()
+		steps := workflowService.GetWorkflowSteps()
+		currentStep := workflowService.GetCurrentStep()
+
+		c.HTML(http.StatusOK, "workflow.html", gin.H{
+			"title":        "ESemail 设置向导",
+			"state":        state,
+			"steps":        steps,
+			"current_step": currentStep,
+		})
+	})
+
 	api := r.Group("/api/v1")
 	{
 		// 公开接口（无需认证）
@@ -155,6 +174,17 @@ func SetupRouter(
 			environment.GET("/check", environmentHandler.CheckEnvironment)
 			environment.GET("/status", environmentHandler.GetEnvironmentStatus)
 			environment.GET("/install-script", environmentHandler.GetInstallScript)
+		}
+
+		// 工作流控制（无需认证，用于设置向导）
+		workflow := api.Group("/workflow")
+		{
+			workflowHandler := NewWorkflowHandler(workflowService, systemService, domainService, userService, certService, mailServer)
+			workflow.GET("/status", workflowHandler.GetWorkflowStatus)
+			workflow.GET("/steps", workflowHandler.GetWorkflowSteps)
+			workflow.POST("/complete/:id", workflowHandler.CompleteStep)
+			workflow.GET("/check/:id", workflowHandler.CheckStepRequirements)
+			workflow.POST("/reset", workflowHandler.ResetWorkflow) // 仅用于开发测试
 		}
 
 		// DNS检查（无需认证）
