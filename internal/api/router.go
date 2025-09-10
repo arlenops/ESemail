@@ -4,6 +4,7 @@ import (
 	"esemail/internal/config"
 	"esemail/internal/middleware"
 	"esemail/internal/service"
+	"html/template"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -86,7 +87,24 @@ func SetupRouter(
 	staticPath := findResourcePath("static")
 	
 	if templatesPath != "" {
-		r.LoadHTMLGlob(filepath.Join(templatesPath, "*"))
+		// 定义自定义模板函数
+		funcMap := template.FuncMap{
+			"mul": func(a, b int) int { return a * b },
+			"len": func(v interface{}) int {
+				switch s := v.(type) {
+				case []int:
+					return len(s)
+				case []interface{}:
+					return len(s)
+				default:
+					return 0
+				}
+			},
+		}
+		
+		// 创建自定义模板并设置函数映射
+		tmpl := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(templatesPath, "*")))
+		r.SetHTMLTemplate(tmpl)
 	}
 	if staticPath != "" {
 		r.Static("/static", staticPath)
