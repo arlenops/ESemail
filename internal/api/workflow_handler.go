@@ -343,21 +343,3 @@ func (h *WorkflowHandler) ResetWorkflow(c *gin.Context) {
 		"message": "工作流已重置",
 	})
 }
-
-// 辅助函数
-func containsInt(slice []int, item int) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
-}
-
-// WorkflowStepWithState 扩展WorkflowStep结构以包含运行时状态
-type WorkflowStepWithState struct {
-	service.WorkflowStep
-	IsCompleted  bool `json:"is_completed"`
-	IsCurrent    bool `json:"is_current"`
-	IsAccessible bool `json:"is_accessible"`
-}

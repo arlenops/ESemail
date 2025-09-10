@@ -12,6 +12,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// WorkflowStepWithState 扩展WorkflowStep结构以包含运行时状态
+type WorkflowStepWithState struct {
+	service.WorkflowStep
+	IsCompleted  bool `json:"is_completed"`
+	IsCurrent    bool `json:"is_current"`
+	IsAccessible bool `json:"is_accessible"`
+}
+
+// containsInt 检查slice中是否包含指定的int值
+func containsInt(slice []int, item int) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
+}
+
 // findResourcePath 查找资源文件路径，支持多种部署结构
 func findResourcePath(resourceType string) string {
 	// 可能的路径列表
@@ -142,8 +160,20 @@ func SetupRouter(
 	// 工作流引导页面
 	r.GET("/workflow", func(c *gin.Context) {
 		state := workflowService.GetCurrentState()
-		steps := workflowService.GetWorkflowSteps()
+		serviceSteps := workflowService.GetWorkflowSteps()
 		currentStep := workflowService.GetCurrentStep()
+
+		// 转换为包含运行时状态的步骤
+		var steps []WorkflowStepWithState
+		for _, step := range serviceSteps {
+			stepWithState := WorkflowStepWithState{
+				WorkflowStep: step,
+				IsCompleted:  containsInt(state.CompletedSteps, step.ID),
+				IsCurrent:    step.ID == state.CurrentStep,
+				IsAccessible: step.ID <= state.CurrentStep,
+			}
+			steps = append(steps, stepWithState)
+		}
 
 		c.HTML(http.StatusOK, "workflow.html", gin.H{
 			"title":        "ESemail 设置向导",

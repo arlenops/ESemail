@@ -65,10 +65,25 @@ func WorkflowRedirectMiddleware(workflowService *service.WorkflowService) gin.Ha
 			return
 		}
 		
+		// 排除静态资源和特殊页面
+		excludePaths := []string{
+			"/workflow", 
+			"/login", 
+			"/static/",
+		}
+		
+		for _, path := range excludePaths {
+			if strings.HasPrefix(c.Request.URL.Path, path) {
+				c.Next()
+				return
+			}
+		}
+		
+		// 获取工作流状态
 		state := workflowService.GetCurrentState()
 		
 		// 如果设置未完成，重定向到工作流页面
-		if !state.IsSetupComplete && c.Request.URL.Path != "/workflow" && c.Request.URL.Path != "/login" {
+		if !state.IsSetupComplete {
 			c.Redirect(http.StatusTemporaryRedirect, "/workflow")
 			c.Abort()
 			return
