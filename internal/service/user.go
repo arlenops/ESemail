@@ -3,8 +3,11 @@ package service
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"log"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -12,6 +15,7 @@ import (
 
 type UserService struct{
 	securityService *SecurityService
+	dataDir        string
 }
 
 type User struct {
@@ -46,18 +50,43 @@ type UpdateUserRequest struct {
 func NewUserService() *UserService {
 	return &UserService{
 		securityService: NewSecurityService(),
+		dataDir:        "./data",
+	}
+}
+
+func NewUserServiceWithConfig(dataDir string) *UserService {
+	return &UserService{
+		securityService: NewSecurityService(),
+		dataDir:        dataDir,
 	}
 }
 
 func (s *UserService) ListUsers() ([]User, error) {
-	// TODO: 实现从数据库读取用户列表
-	return []User{}, nil
+	users, err := s.loadUsers()
+	if err != nil {
+		log.Printf("加载用户列表失败: %v", err)
+		return []User{}, nil // 返回空数组而不是错误
+	}
+	return users, nil
 }
 
 func (s *UserService) CreateUser(req CreateUserRequest) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("密码加密失败: %v", err)
+	}
+
+	// 加载现有用户
+	users, err := s.loadUsers()
+	if err != nil {
+		users = []User{} // 如果加载失败，创建新的列表
+	}
+
+	// 检查邮箱是否已存在
+	for _, u := range users {
+		if u.Email == req.Email {
+			return nil, fmt.Errorf("邮箱 %s 已存在", req.Email)
+		}
 	}
 
 	user := &User{
@@ -79,7 +108,16 @@ func (s *UserService) CreateUser(req CreateUserRequest) (*User, error) {
 		return nil, fmt.Errorf("创建系统用户失败: %v", err)
 	}
 
-	return user, nil
+	// 保存用户到JSON文件
+	users = append(users, *user)
+	if err := s.saveUsers(users); err != nil {
+		return nil, fmt.Errorf("保存用户数据失败: %v", err)
+	}
+
+	// 返回时不包含密码
+	userResponse := *user
+	userResponse.Password = ""
+	return &userResponse, nil
 }
 
 func (s *UserService) UpdateUser(id string, req UpdateUserRequest) (*User, error) {
@@ -218,4 +256,53 @@ func (s *UserService) SaveUser(userID string, user *User) error {
 	// TODO: 实现保存用户信息到数据库
 	user.UpdatedAt = time.Now()
 	return fmt.Errorf("用户保存功能需要配置数据库")
+}
+
+// loadUsers 加载用户数据
+func (s *UserService) loadUsers() ([]User, error) {
+	usersFile := filepath.Join(s.dataDir, "users.json")
+	
+	// 确保数据目录存在
+	if err := os.MkdirAll(filepath.Dir(usersFile), 0755); err != nil {
+		return nil, fmt.Errorf("创建数据目录失败: %v", err)
+	}
+	
+	// 如果文件不存在，返回空列表
+	if _, err := os.Stat(usersFile); os.IsNotExist(err) {
+		return []User{}, nil
+	}
+	
+	data, err := os.ReadFile(usersFile)
+	if err != nil {
+		return nil, fmt.Errorf("读取用户文件失败: %v", err)
+	}
+	
+	var users []User
+	if err := json.Unmarshal(data, &users); err != nil {
+		return nil, fmt.Errorf("解析用户文件失败: %v", err)
+	}
+	
+	return users, nil
+}
+
+// saveUsers 保存用户数据
+func (s *UserService) saveUsers(users []User) error {
+	usersFile := filepath.Join(s.dataDir, "users.json")
+	
+	// 确保数据目录存在
+	if err := os.MkdirAll(filepath.Dir(usersFile), 0755); err != nil {
+		return fmt.Errorf("创建数据目录失败: %v", err)
+	}
+	
+	data, err := json.MarshalIndent(users, "", "  ")
+	if err != nil {
+		return fmt.Errorf("序列化用户数据失败: %v", err)
+	}
+	
+	if err := os.WriteFile(usersFile, data, 0644); err != nil {
+		return fmt.Errorf("保存用户文件失败: %v", err)
+	}
+	
+	log.Printf("已保存 %d 个用户到文件", len(users))
+	return nil
 }
