@@ -198,9 +198,9 @@ func SetupRouter(
 		}
 		
 		fmt.Printf("模板数据: %+v\n", data)
-		fmt.Printf("准备渲染 workflow.html 模板\n")
+		fmt.Printf("准备渲染 workflow_simple.html 模板\n")
 		
-		c.HTML(http.StatusOK, "workflow.html", data)
+		c.HTML(http.StatusOK, "workflow_simple.html", data)
 	})
 
 	// 简单测试页面

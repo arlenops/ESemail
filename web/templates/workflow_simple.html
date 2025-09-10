@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.title}}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .step { border: 1px solid #ddd; margin: 20px 0; padding: 20px; border-radius: 8px; }
+        .completed { background-color: #d4edda; border-color: #c3e6cb; }
+        .current { background-color: #d1ecf1; border-color: #bee5eb; }
+        .pending { background-color: #f8f9fa; border-color: #dee2e6; }
+    </style>
+</head>
+<body>
+    <h1>{{.title}}</h1>
+    
+    <div>
+        <h2>工作流状态</h2>
+        <p>当前步骤: {{.state.CurrentStep}}</p>
+        <p>已完成步骤数: {{len .state.CompletedSteps}}</p>
+        <p>设置完成: {{.state.IsSetupComplete}}</p>
+        <p>解锁功能: {{len .state.UnlockedFeatures}} 个</p>
+    </div>
+
+    <div>
+        <h2>总体进度</h2>
+        <div style="background-color: #e9ecef; height: 20px; border-radius: 10px;">
+            <div style="background-color: #007bff; height: 100%; width: {{mul (len .state.CompletedSteps) 16}}%; border-radius: 10px;"></div>
+        </div>
+        <p>进度: {{len .state.CompletedSteps}} / 6 步骤完成</p>
+    </div>
+
+    <h2>设置步骤</h2>
+    {{range $index, $step := .steps}}
+        <div class="step {{if .IsCompleted}}completed{{else if .IsCurrent}}current{{else}}pending{{end}}">
+            <h3>步骤 {{$step.ID}}: {{$step.Title}}</h3>
+            <p>{{$step.Description}}</p>
+            <p><strong>预计时间:</strong> {{$step.EstimateTime}}</p>
+            
+            <div>
+                <strong>状态:</strong>
+                {{if .IsCompleted}}✅ 已完成
+                {{else if .IsCurrent}}🔄 进行中
+                {{else if .IsAccessible}}⏳ 可开始
+                {{else}}🔒 未解锁{{end}}
+            </div>
+            
+            {{if $step.Requirements}}
+                <div style="margin-top: 10px;">
+                    <strong>前提条件:</strong>
+                    <ul>
+                        {{range $requirement := $step.Requirements}}
+                            <li>{{$requirement}}</li>
+                        {{end}}
+                    </ul>
+                </div>
+            {{end}}
+
+            <div style="margin-top: 15px;">
+                {{if .IsCompleted}}
+                    <button disabled>已完成</button>
+                {{else if .IsCurrent}}
+                    <button onclick="checkRequirements({{$step.ID}})">检查要求</button>
+                    <button onclick="completeStep({{$step.ID}})">标记完成</button>
+                {{else}}
+                    <button disabled>未解锁</button>
+                {{end}}
+            </div>
+        </div>
+    {{end}}
+
+    {{if .state.IsSetupComplete}}
+        <div style="background-color: #d4edda; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+            <h2>🎉 恭喜！设置已完成</h2>
+            <p>您的邮件服务器已经成功配置并可以使用了</p>
+            <a href="/" style="background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">进入管理面板</a>
+        </div>
+    {{end}}
+
+    <script>
+        function checkRequirements(stepId) {
+            fetch(`/api/v1/workflow/check/${stepId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('检查完成，请查看控制台输出');
+                        console.log('步骤要求检查结果:', data.checks);
+                    } else {
+                        alert('检查失败: ' + data.error);
+                    }
+                })
+                .catch(error => alert('请求失败: ' + error.message));
+        }
+
+        function completeStep(stepId) {
+            if (!confirm(`确定要完成步骤 ${stepId} 吗？`)) return;
+            
+            fetch(`/api/v1/workflow/complete/${stepId}`, { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('步骤完成！');
+                        location.reload();
+                    } else {
+                        alert('完成失败: ' + data.error);
+                    }
+                })
+                .catch(error => alert('请求失败: ' + error.message));
+        }
+    </script>
+</body>
+</html>
