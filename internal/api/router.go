@@ -148,13 +148,29 @@ func SetupRouter(
 			return
 		}
 
+		// 获取工作流状态
+		state := workflowService.GetCurrentState()
+		
 		// 检查系统是否已初始化
 		initStatus := systemService.GetInitializationStatus()
+		
+		// 计算功能解锁状态
+		unlockStatus := map[string]bool{
+			"system_init":    initStatus["is_initialized"].(bool),
+			"domain_config":  containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2,
+			"dns_verified":   containsInt(state.CompletedSteps, 3) || state.CurrentStep > 3,
+			"ssl_config":     containsInt(state.CompletedSteps, 4) || state.CurrentStep > 4,
+			"user_mgmt":      containsInt(state.CompletedSteps, 5) || state.CurrentStep > 5,
+			"mail_service":   containsInt(state.CompletedSteps, 6) || state.IsSetupComplete,
+			"setup_complete": state.IsSetupComplete,
+		}
 		
 		c.HTML(http.StatusOK, "dashboard.html", gin.H{
 			"title":           "ESemail 邮局管理面板",
 			"is_initialized":  initStatus["is_initialized"],
 			"init_status":     initStatus,
+			"workflow_state":  state,
+			"unlock_status":   unlockStatus,
 		})
 	})
 

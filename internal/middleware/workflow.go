@@ -23,7 +23,11 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 			"/api/v1/health",
 			"/api/v1/workflow/",
 			"/api/v1/csrf-token",
+			"/api/v1/system/", // 系统初始化相关
+			"/api/v1/setup/",  // 系统设置相关
+			"/api/v1/environment/", // 环境检查
 			"/static/",
+			"/test", // 临时测试页面
 		}
 		
 		// 检查是否是始终允许的路径
@@ -34,22 +38,58 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 			}
 		}
 		
-		// 检查功能是否已解锁
-		if !workflowService.IsFeatureUnlocked(path) {
-			// 获取当前步骤信息
-			currentStep := workflowService.GetCurrentStep()
-			state := workflowService.GetCurrentState()
-			
-			c.JSON(http.StatusLocked, gin.H{
-				"success":        false,
-				"error":          "功能未解锁",
-				"message":        "请按照设置向导完成配置后再使用此功能",
-				"current_step":   currentStep,
-				"workflow_state": state,
-				"redirect_url":   "/workflow",
-			})
-			c.Abort()
-			return
+		// 获取工作流状态
+		state := workflowService.GetCurrentState()
+		
+		// 根据步骤进度控制API访问
+		if strings.HasPrefix(path, "/api/v1/domains") {
+			// 域名管理需要系统初始化完成
+			if state.CurrentStep < 2 {
+				c.JSON(http.StatusLocked, gin.H{
+					"success": false,
+					"error":   "功能未解锁",
+					"message": "请先完成系统初始化",
+					"required_step": "系统初始化",
+				})
+				c.Abort()
+				return
+			}
+		} else if strings.HasPrefix(path, "/api/v1/certificates") {
+			// 证书管理需要域名配置完成
+			if state.CurrentStep < 4 {
+				c.JSON(http.StatusLocked, gin.H{
+					"success": false,
+					"error":   "功能未解锁", 
+					"message": "请先完成域名配置和DNS验证",
+					"required_step": "DNS验证",
+				})
+				c.Abort()
+				return
+			}
+		} else if strings.HasPrefix(path, "/api/v1/users") {
+			// 用户管理需要SSL证书配置完成
+			if state.CurrentStep < 5 {
+				c.JSON(http.StatusLocked, gin.H{
+					"success": false,
+					"error":   "功能未解锁",
+					"message": "请先完成SSL证书配置", 
+					"required_step": "SSL证书",
+				})
+				c.Abort()
+				return
+			}
+		} else if strings.HasPrefix(path, "/api/v1/mail") {
+			// 邮件服务需要用户管理完成
+			if state.CurrentStep < 6 {
+				c.JSON(http.StatusLocked, gin.H{
+					"success": false,
+					"error":   "功能未解锁",
+					"message": "请先完成用户管理",
+					"required_step": "用户管理", 
+				})
+				c.Abort()
+				return
+			}
 		}
 		
 		c.Next()
