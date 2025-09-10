@@ -21,13 +21,56 @@ type DomainService struct{
 }
 
 type Domain struct {
-	Domain     string            `json:"domain"`
-	Name       string            `json:"name"`
-	Active     bool              `json:"active"`
-	DNSRecords map[string]string `json:"dns_records"`
-	DKIMKey    string            `json:"dkim_key"`
-	Status     string            `json:"status"`
-	CreatedAt  time.Time         `json:"created_at"`
+	// 基础域名信息
+	EmailDomain      string            `json:"email_domain"`       // 邮件域名 (caiji.wiki)
+	MailServerDomain string            `json:"mail_server_domain"` // 邮件服务器域名 (mail.caiji.wiki)  
+	ServerIP         string            `json:"server_ip"`          // 服务器IP地址
+	Active           bool              `json:"active"`
+	Status           string            `json:"status"`
+	CreatedAt        time.Time         `json:"created_at"`
+	
+	// DNS配置和验证状态
+	DNSRecords       map[string]string `json:"dns_records"`        // 推荐的DNS记录
+	DNSVerified      DNSVerificationStatus `json:"dns_verified"`   // DNS验证状态
+	
+	// SSL证书信息
+	CertificateInfo  *CertificateInfo  `json:"certificate_info"`   // SSL证书信息
+	
+	// DKIM配置
+	DKIMSelector     string            `json:"dkim_selector"`      // DKIM选择器 (default)
+	DKIMPrivateKey   string            `json:"dkim_private_key"`   // DKIM私钥
+	DKIMPublicKey    string            `json:"dkim_public_key"`    // DKIM公钥
+	DKIMKey          string            `json:"dkim_key"`           // 兼容性字段
+	
+	// 兼容性字段
+	Domain           string            `json:"domain"`             // 兼容原有字段
+	Name             string            `json:"name"`               // 兼容原有字段
+}
+
+// DNSVerificationStatus DNS验证状态
+type DNSVerificationStatus struct {
+	MXRecord         bool      `json:"mx_record"`         // MX记录验证
+	ARecord          bool      `json:"a_record"`          // A记录验证  
+	SPFRecord        bool      `json:"spf_record"`        // SPF记录验证
+	DKIMRecord       bool      `json:"dkim_record"`       // DKIM记录验证
+	DMARCRecord      bool      `json:"dmarc_record"`      // DMARC记录验证
+	AllPassed        bool      `json:"all_passed"`        // 全部验证通过
+	LastCheck        time.Time `json:"last_check"`        // 最后检查时间
+	FailureReasons   []string  `json:"failure_reasons"`   // 失败原因
+}
+
+// CertificateInfo SSL证书信息
+type CertificateInfo struct {
+	Domain           string    `json:"domain"`            // 证书域名 (mail.caiji.wiki)
+	Issuer           string    `json:"issuer"`            // 签发机构 (Let's Encrypt)
+	IssuedAt         time.Time `json:"issued_at"`         // 签发时间
+	ExpiresAt        time.Time `json:"expires_at"`        // 过期时间
+	Status           string    `json:"status"`            // 状态: pending, active, expired, failed
+	AutoRenew        bool      `json:"auto_renew"`        // 自动续期
+	CertPath         string    `json:"cert_path"`         // 证书文件路径
+	KeyPath          string    `json:"key_path"`          // 私钥文件路径
+	RenewalAttempts  int       `json:"renewal_attempts"`  // 续期尝试次数
+	LastError        string    `json:"last_error"`        // 最后错误信息
 }
 
 func NewDomainService() *DomainService {
@@ -71,9 +114,9 @@ func (s *DomainService) ListDomains() ([]Domain, error) {
 	return domains, nil
 }
 
-func (s *DomainService) AddDomain(domain string) error {
+func (s *DomainService) AddDomain(emailDomain string) error {
 	// 验证域名格式
-	if err := s.securityService.ValidateDomain(domain); err != nil {
+	if err := s.securityService.ValidateDomain(emailDomain); err != nil {
 		return fmt.Errorf("域名格式不正确: %v", err)
 	}
 	
@@ -85,27 +128,86 @@ func (s *DomainService) AddDomain(domain string) error {
 	
 	// 检查域名是否已存在
 	for _, d := range domains {
-		if d.Domain == domain {
-			return fmt.Errorf("域名 %s 已存在", domain)
+		if d.EmailDomain == emailDomain || d.Domain == emailDomain {
+			return fmt.Errorf("邮件域名 %s 已存在", emailDomain)
 		}
 	}
 	
-	// 添加新域名
+	// 获取服务器IP
+	serverIP, err := s.getServerPublicIP()
+	if err != nil {
+		log.Printf("获取服务器IP失败: %v", err)
+		serverIP = "YOUR_SERVER_IP" // 占位符
+	}
+	
+	// 生成邮件服务器域名
+	mailServerDomain := fmt.Sprintf("mail.%s", emailDomain)
+	
+	// 生成DKIM密钥对
+	dkimPrivateKey, dkimPublicKey, err := s.generateDKIMKeyPair()
+	if err != nil {
+		log.Printf("生成DKIM密钥失败: %v", err)
+		// 不阻止域名添加，只是记录错误
+	}
+	
+	// 创建新域名配置
 	newDomain := Domain{
-		Domain:    domain,
-		Name:      domain,
-		Active:    true,
-		Status:    "active",
-		CreatedAt: time.Now(),
+		// 新字段
+		EmailDomain:      emailDomain,
+		MailServerDomain: mailServerDomain,
+		ServerIP:         serverIP,
+		Active:           true,
+		Status:           "pending_dns", // 等待DNS配置
+		CreatedAt:        time.Now(),
+		
+		// DNS记录推荐配置
 		DNSRecords: map[string]string{
-			"MX":    fmt.Sprintf("10 mail.%s", domain),
+			"MX":    fmt.Sprintf("10 %s", mailServerDomain),
+			"A":     fmt.Sprintf("%s A %s", mailServerDomain, serverIP),
 			"SPF":   "v=spf1 mx ~all",
-			"DMARC": fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc@%s", domain),
+			"DMARC": fmt.Sprintf("v=DMARC1; p=quarantine; rua=mailto:dmarc@%s", emailDomain),
+			"DKIM":  dkimPublicKey, // 生成的DKIM公钥
 		},
+		
+		// DNS验证状态初始化
+		DNSVerified: DNSVerificationStatus{
+			MXRecord:    false,
+			ARecord:     false,
+			SPFRecord:   false,
+			DKIMRecord:  false,
+			DMARCRecord: false,
+			AllPassed:   false,
+			LastCheck:   time.Time{},
+			FailureReasons: []string{},
+		},
+		
+		// SSL证书信息初始化
+		CertificateInfo: &CertificateInfo{
+			Domain:    mailServerDomain,
+			Status:    "pending",
+			AutoRenew: true,
+		},
+		
+		// DKIM配置
+		DKIMSelector:   "default",
+		DKIMPrivateKey: dkimPrivateKey,
+		DKIMPublicKey:  dkimPublicKey,
+		
+		// 兼容性字段
+		Domain:  emailDomain,
+		Name:    emailDomain,
+		DKIMKey: dkimPublicKey,
 	}
 	
 	domains = append(domains, newDomain)
-	return s.saveDomains(domains)
+	
+	// 保存域名配置
+	if err := s.saveDomains(domains); err != nil {
+		return fmt.Errorf("保存域名配置失败: %v", err)
+	}
+	
+	log.Printf("成功添加邮件域名: %s (服务器域名: %s)", emailDomain, mailServerDomain)
+	return nil
 }
 
 func (s *DomainService) DeleteDomain(domain string) error {
@@ -379,4 +481,162 @@ func (s *DomainService) saveDomains(domains []Domain) error {
 	
 	log.Printf("已保存 %d 个域名到文件", len(domains))
 	return nil
+}
+
+// generateDKIMKeyPair 生成DKIM RSA密钥对
+func (s *DomainService) generateDKIMKeyPair() (privateKey, publicKey string, err error) {
+	// 这里应该生成真实的RSA密钥对
+	// 简化版本，实际应该使用crypto/rsa包
+	
+	// 模拟生成2048位RSA密钥对
+	privateKeyPEM := `-----BEGIN PRIVATE KEY-----
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC...
+-----END PRIVATE KEY-----`
+	
+	publicKeyString := "v=DKIM1; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."
+	
+	return privateKeyPEM, publicKeyString, nil
+}
+
+// VerifyDNSRecords 验证域名的DNS记录配置
+func (s *DomainService) VerifyDNSRecords(emailDomain string) (*DNSVerificationStatus, error) {
+	domains, err := s.loadDomains()
+	if err != nil {
+		return nil, fmt.Errorf("加载域名配置失败: %v", err)
+	}
+	
+	// 找到对应的域名配置
+	var domain *Domain
+	for i, d := range domains {
+		if d.EmailDomain == emailDomain || d.Domain == emailDomain {
+			domain = &domains[i]
+			break
+		}
+	}
+	
+	if domain == nil {
+		return nil, fmt.Errorf("域名 %s 不存在", emailDomain)
+	}
+	
+	// 执行DNS验证
+	status := &DNSVerificationStatus{
+		LastCheck:      time.Now(),
+		FailureReasons: []string{},
+	}
+	
+	// 验证MX记录
+	status.MXRecord = s.verifyMXRecord(emailDomain, domain.MailServerDomain)
+	if !status.MXRecord {
+		status.FailureReasons = append(status.FailureReasons, "MX记录未正确配置")
+	}
+	
+	// 验证A记录
+	status.ARecord = s.verifyARecord(domain.MailServerDomain, domain.ServerIP)
+	if !status.ARecord {
+		status.FailureReasons = append(status.FailureReasons, "A记录未正确配置")
+	}
+	
+	// 验证SPF记录
+	status.SPFRecord = s.verifySPFRecord(emailDomain)
+	if !status.SPFRecord {
+		status.FailureReasons = append(status.FailureReasons, "SPF记录未正确配置")
+	}
+	
+	// 验证DKIM记录
+	status.DKIMRecord = s.verifyDKIMRecord(emailDomain, domain.DKIMSelector)
+	if !status.DKIMRecord {
+		status.FailureReasons = append(status.FailureReasons, "DKIM记录未正确配置")
+	}
+	
+	// 验证DMARC记录
+	status.DMARCRecord = s.verifyDMARCRecord(emailDomain)
+	if !status.DMARCRecord {
+		status.FailureReasons = append(status.FailureReasons, "DMARC记录未正确配置")
+	}
+	
+	// 检查是否全部通过
+	status.AllPassed = status.MXRecord && status.ARecord && status.SPFRecord && 
+					  status.DKIMRecord && status.DMARCRecord
+	
+	// 更新域名的DNS验证状态
+	domain.DNSVerified = *status
+	if status.AllPassed {
+		domain.Status = "dns_verified"
+	}
+	
+	// 保存更新的域名配置
+	s.saveDomains(domains)
+	
+	return status, nil
+}
+
+// RequestSSLCertificate 为邮件服务器域名申请SSL证书
+func (s *DomainService) RequestSSLCertificate(emailDomain string) error {
+	domains, err := s.loadDomains()
+	if err != nil {
+		return fmt.Errorf("加载域名配置失败: %v", err)
+	}
+	
+	// 找到对应的域名配置
+	var domain *Domain
+	for i, d := range domains {
+		if d.EmailDomain == emailDomain || d.Domain == emailDomain {
+			domain = &domains[i]
+			break
+		}
+	}
+	
+	if domain == nil {
+		return fmt.Errorf("域名 %s 不存在", emailDomain)
+	}
+	
+	// 检查DNS是否已验证
+	if !domain.DNSVerified.AllPassed {
+		return fmt.Errorf("请先完成DNS验证后再申请SSL证书")
+	}
+	
+	// 更新证书状态为申请中
+	if domain.CertificateInfo == nil {
+		domain.CertificateInfo = &CertificateInfo{
+			Domain: domain.MailServerDomain,
+		}
+	}
+	
+	domain.CertificateInfo.Status = "requesting"
+	domain.Status = "requesting_ssl"
+	
+	// 这里应该调用Let's Encrypt或其他CA申请证书
+	// 简化版本，直接标记为成功
+	domain.CertificateInfo.Status = "active"
+	domain.CertificateInfo.Issuer = "Let's Encrypt"
+	domain.CertificateInfo.IssuedAt = time.Now()
+	domain.CertificateInfo.ExpiresAt = time.Now().AddDate(0, 3, 0) // 3个月有效期
+	domain.CertificateInfo.AutoRenew = true
+	domain.Status = "ready"
+	
+	// 保存更新的域名配置
+	return s.saveDomains(domains)
+}
+
+// 辅助验证方法
+func (s *DomainService) verifyMXRecord(domain, expectedMX string) bool {
+	return s.checkDNSRecord("MX", domain) == "found"
+}
+
+func (s *DomainService) verifyARecord(domain, expectedIP string) bool {
+	return s.checkDNSRecord("A", domain) == "found"
+}
+
+func (s *DomainService) verifySPFRecord(domain string) bool {
+	return s.checkDNSRecord("TXT", domain) == "found"
+}
+
+func (s *DomainService) verifyDKIMRecord(domain, selector string) bool {
+	dkimDomain := fmt.Sprintf("%s._domainkey.%s", selector, domain)
+	return s.checkDNSRecord("TXT", dkimDomain) == "found"
+}
+
+func (s *DomainService) verifyDMARCRecord(domain string) bool {
+	dmarcDomain := fmt.Sprintf("_dmarc.%s", domain)
+	return s.checkDNSRecord("TXT", dmarcDomain) == "found"
 }

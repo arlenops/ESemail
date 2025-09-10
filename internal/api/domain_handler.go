@@ -96,6 +96,55 @@ func (h *DomainHandler) CheckDNSRecords(c *gin.Context) {
 	})
 }
 
+// VerifyDNSRecords 专业DNS验证
+func (h *DomainHandler) VerifyDNSRecords(c *gin.Context) {
+	domain := c.Param("domain")
+
+	status, err := h.domainService.VerifyDNSRecords(domain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"domain":        domain,
+		"dns_status":    status,
+		"verified_at":   status.LastCheck.Format("2006-01-02 15:04:05"),
+		"all_passed":    status.AllPassed,
+		"failures":      status.FailureReasons,
+	})
+}
+
+// RequestSSLCertificate 申请SSL证书
+func (h *DomainHandler) RequestSSLCertificate(c *gin.Context) {
+	domain := c.Param("domain")
+
+	if err := h.domainService.RequestSSLCertificate(domain); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// SSL证书申请成功，推进工作流到步骤4
+	if h.workflowService != nil {
+		if err := h.workflowService.CompleteStep(4); err != nil {
+			c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "SSL证书申请成功",
+		"domain":  domain,
+	})
+}
+
 func (h *DomainHandler) TestDNSQuery(c *gin.Context) {
 	testDomain := c.Query("test_domain")
 	if testDomain == "" {

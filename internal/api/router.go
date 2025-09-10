@@ -331,6 +331,8 @@ func SetupRouter(
 				domains.DELETE("/:domain", domainHandler.DeleteDomain)
 				domains.GET("/:domain/dns", domainHandler.GetDNSRecords)
 				domains.POST("/:domain/dns/check", domainHandler.CheckDNSRecords)
+				domains.POST("/:domain/dns/verify", domainHandler.VerifyDNSRecords) // 专业DNS验证
+				domains.POST("/:domain/ssl/request", domainHandler.RequestSSLCertificate) // SSL证书申请
 				domains.GET("/test-dns", domainHandler.TestDNSQuery)
 			}
 
