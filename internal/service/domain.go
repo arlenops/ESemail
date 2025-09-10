@@ -2,6 +2,7 @@ package service
 
 import (
 	"encoding/json"
+	"esemail/internal/models"
 	"fmt"
 	"io"
 	"log"
@@ -124,7 +125,7 @@ func (s *DomainService) DeleteDomain(domain string) error {
 	return fmt.Errorf("域名 %s 不存在", domain)
 }
 
-func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
+func (s *DomainService) GetDNSRecords(domain string) ([]models.DNSRecord, error) {
 	// 获取服务器外网IP
 	serverIP, err := s.getServerPublicIP()
 	if err != nil {
@@ -138,9 +139,9 @@ func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
 	status := s.dnsService.CheckDomainDNS(domain, serverIP, mailServer)
 	
 	// 转换DNS记录格式以匹配models.DNSRecord
-	var records []DNSRecord
+	var records []models.DNSRecord
 	for _, record := range status.Records {
-		records = append(records, DNSRecord{
+		records = append(records, models.DNSRecord{
 			Type:     record.Type,
 			Name:     record.Name,
 			Value:    record.Value,
@@ -154,7 +155,7 @@ func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
 }
 
 // CheckDNSRecords 检查域名的DNS记录实际配置状态
-func (s *DomainService) CheckDNSRecords(domain string) ([]DNSRecord, error) {
+func (s *DomainService) CheckDNSRecords(domain string) ([]models.DNSRecord, error) {
 	// 获取服务器外网IP
 	serverIP, err := s.getServerPublicIP()
 	if err != nil {
@@ -168,7 +169,7 @@ func (s *DomainService) CheckDNSRecords(domain string) ([]DNSRecord, error) {
 	status := s.dnsService.CheckDomainDNS(domain, serverIP, mailServer)
 	
 	// 转换DNS记录格式以匹配models.DNSRecord，包含实际检查结果
-	var records []DNSRecord
+	var records []models.DNSRecord
 	for _, record := range status.Records {
 		// 根据检查结果映射状态
 		mappedStatus := "missing"
@@ -183,7 +184,7 @@ func (s *DomainService) CheckDNSRecords(domain string) ([]DNSRecord, error) {
 			mappedStatus = "error"
 		}
 		
-		records = append(records, DNSRecord{
+		records = append(records, models.DNSRecord{
 			Type:     record.Type,
 			Name:     record.Name,
 			Value:    record.Expected, // 期望值
