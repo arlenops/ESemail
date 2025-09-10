@@ -154,14 +154,14 @@ func SetupRouter(
 		// 检查系统是否已初始化
 		initStatus := systemService.GetInitializationStatus()
 		
-		// 计算功能解锁状态
+		// 计算功能解锁状态 - 简化为关键步骤
 		unlockStatus := map[string]bool{
 			"system_init":    initStatus["is_initialized"].(bool),
 			"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep > 1),
-			"dns_verified":   containsInt(state.CompletedSteps, 3) || state.CurrentStep > 3,
-			"ssl_config":     containsInt(state.CompletedSteps, 4) || state.CurrentStep > 4,
-			"user_mgmt":      containsInt(state.CompletedSteps, 5) || state.CurrentStep > 5,
-			"mail_service":   containsInt(state.CompletedSteps, 6) || state.IsSetupComplete,
+			"dns_verified":   containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2, // 域名完成后可进行DNS验证
+			"ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2, // 域名完成后可配置SSL
+			"user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2, // 域名完成后可管理用户
+			"mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep > 5, // 用户创建后可使用邮件服务
 			"setup_complete": state.IsSetupComplete,
 		}
 		
@@ -325,12 +325,13 @@ func SetupRouter(
 			// 域名管理
 			domains := authenticated.Group("/domains")
 			{
-				domains.GET("", NewDomainHandler(domainService).ListDomains)
-				domains.POST("", NewDomainHandler(domainService).AddDomain)
-				domains.DELETE("/:domain", NewDomainHandler(domainService).DeleteDomain)
-				domains.GET("/:domain/dns", NewDomainHandler(domainService).GetDNSRecords)
-				domains.POST("/:domain/dns/check", NewDomainHandler(domainService).CheckDNSRecords)
-				domains.GET("/test-dns", NewDomainHandler(domainService).TestDNSQuery)
+				domainHandler := NewDomainHandler(domainService, workflowService)
+				domains.GET("", domainHandler.ListDomains)
+				domains.POST("", domainHandler.AddDomain)
+				domains.DELETE("/:domain", domainHandler.DeleteDomain)
+				domains.GET("/:domain/dns", domainHandler.GetDNSRecords)
+				domains.POST("/:domain/dns/check", domainHandler.CheckDNSRecords)
+				domains.GET("/test-dns", domainHandler.TestDNSQuery)
 			}
 
 			// 用户管理
