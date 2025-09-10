@@ -315,8 +315,9 @@
                                             <form id="send-mail-form">
                                                 <div class="mb-3">
                                                     <label for="mail-from" class="form-label">发件人</label>
-                                                    <input type="email" class="form-control" id="mail-from" 
-                                                           placeholder="admin@example.com" required>
+                                                    <select class="form-select" id="mail-from" required>
+                                                        <option value="">选择发件人邮箱</option>
+                                                    </select>
                                                 </div>
                                                 <div class="mb-3">
                                                     <label for="mail-to" class="form-label">收件人</label>
@@ -401,15 +402,31 @@
                     <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
                         <h1 class="h2">证书管理</h1>
                         <div class="btn-toolbar mb-2 mb-md-0">
-                            <button type="button" class="btn btn-primary">
+                            <button type="button" class="btn btn-success" onclick="refreshCertificates()">
+                                <i class="fas fa-sync-alt"></i> 刷新
+                            </button>
+                            <button type="button" class="btn btn-primary ms-2" data-bs-toggle="modal" data-bs-target="#issue-cert-modal">
                                 <i class="fas fa-certificate"></i> 签发证书
                             </button>
                         </div>
                     </div>
-                    <div class="empty-state">
+                    
+                    <!-- 证书列表容器 -->
+                    <div id="certificates-list">
+                        <div class="text-center py-4">
+                            <div class="loading-spinner mb-3"></div>
+                            <p class="text-muted">正在加载证书列表...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 空状态提示 -->
+                    <div id="certificates-empty-state" class="empty-state" style="display: none;">
                         <i class="fas fa-shield-alt"></i>
-                        <h3>SSL证书管理</h3>
-                        <p>管理SSL/TLS证书，自动续签和DNS验证</p>
+                        <h3>暂无证书</h3>
+                        <p>点击"签发证书"按钮为您的域名申请SSL/TLS证书</p>
+                        <button type="button" class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#issue-cert-modal">
+                            <i class="fas fa-certificate"></i> 签发证书
+                        </button>
                     </div>
                 </div>
 
@@ -597,6 +614,12 @@
                         loadDashboardData();
                     } else if (targetSection === 'domains-section') {
                         loadDomains();
+                    } else if (targetSection === 'users-section') {
+                        loadUsers();
+                    } else if (targetSection === 'mail-section') {
+                        loadUserEmailOptions();
+                    } else if (targetSection === 'certificates-section') {
+                        loadCertificates();
                     }
                 });
             });
@@ -974,6 +997,75 @@
             }
         }
 
+        // 邮件管理相关函数
+        async function loadUserEmailOptions() {
+            try {
+                // 获取用户列表
+                const response = await apiRequest('/api/v1/users');
+                const users = await response.json();
+                
+                const fromSelect = document.getElementById('mail-from');
+                fromSelect.innerHTML = '<option value="">选择发件人邮箱</option>';
+                
+                if (users && users.length > 0) {
+                    users.forEach(user => {
+                        if (user.email) {
+                            const option = document.createElement('option');
+                            option.value = user.email;
+                            option.textContent = `${user.name || user.email} <${user.email}>`;
+                            fromSelect.appendChild(option);
+                        }
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '暂无可用邮箱用户，请先创建用户';
+                    option.disabled = true;
+                    fromSelect.appendChild(option);
+                }
+            } catch (error) {
+                console.error('加载邮箱选项失败:', error);
+                const fromSelect = document.getElementById('mail-from');
+                fromSelect.innerHTML = '<option value="">加载邮箱失败</option>';
+            }
+        }
+
+        // 用户管理相关函数
+        async function loadUsers() {
+            console.log('加载用户列表');
+            // TODO: 实现用户列表加载
+        }
+
+        // 加载域名选项到用户表单
+        async function loadDomainOptions() {
+            try {
+                const response = await apiRequest('/api/v1/domains');
+                const domains = await response.json();
+                
+                const domainSelect = document.getElementById('user-domain');
+                domainSelect.innerHTML = '<option value="">选择域名</option>';
+                
+                if (domains && domains.length > 0) {
+                    domains.forEach(domain => {
+                        const option = document.createElement('option');
+                        option.value = domain.domain || domain.name;
+                        option.textContent = domain.domain || domain.name;
+                        domainSelect.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '暂无可用域名，请先添加域名';
+                    option.disabled = true;
+                    domainSelect.appendChild(option);
+                }
+            } catch (error) {
+                console.error('加载域名选项失败:', error);
+                const domainSelect = document.getElementById('user-domain');
+                domainSelect.innerHTML = '<option value="">加载域名失败</option>';
+            }
+        }
+
         // 删除域名
         async function deleteDomain(domain) {
             if (!confirm(`确定要删除域名 ${domain} 吗？此操作不可撤销。`)) {
@@ -996,6 +1088,158 @@
                 console.error('删除域名失败:', error);
                 alert('删除失败: ' + error.message);
             }
+        }
+        
+        // 证书管理相关函数
+        async function loadCertificates() {
+            const certificatesListContainer = document.getElementById('certificates-list');
+            const emptyStateContainer = document.getElementById('certificates-empty-state');
+            
+            try {
+                const response = await apiRequest('/api/v1/certificates');
+                const certificates = await response.json();
+                
+                if (certificates && certificates.length > 0) {
+                    emptyStateContainer.style.display = 'none';
+                    certificatesListContainer.style.display = 'block';
+                    
+                    let html = '<div class="row">';
+                    certificates.forEach(cert => {
+                        const statusBadge = cert.status === 'valid' ? 
+                            '<span class="badge bg-success">有效</span>' : 
+                            cert.status === 'expired' ?
+                            '<span class="badge bg-danger">已过期</span>' :
+                            '<span class="badge bg-warning">即将过期</span>';
+                        
+                        const expiryDate = cert.expires_at ? 
+                            new Date(cert.expires_at).toLocaleDateString() : 
+                            '未知';
+                            
+                        html += `
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card h-100">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <h6 class="mb-0">${cert.domain}</h6>
+                                        ${statusBadge}
+                                    </div>
+                                    <div class="card-body">
+                                        <p class="text-muted small mb-2">类型: ${cert.type || 'SSL'}</p>
+                                        <p class="text-muted small mb-2">到期时间: ${expiryDate}</p>
+                                        <p class="text-muted small mb-3">签发商: ${cert.issuer || 'Let\'s Encrypt'}</p>
+                                        <div class="btn-group w-100" role="group">
+                                            <button class="btn btn-outline-primary btn-sm" onclick="renewCertificate('${cert.domain}')">
+                                                <i class="fas fa-sync-alt"></i> 续期
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="deleteCertificate('${cert.domain}')">
+                                                <i class="fas fa-trash"></i> 删除
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    html += '</div>';
+                    certificatesListContainer.innerHTML = html;
+                } else {
+                    certificatesListContainer.style.display = 'none';
+                    emptyStateContainer.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('加载证书失败:', error);
+                certificatesListContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i> 
+                        加载证书列表失败：${error.message}
+                        <button class="btn btn-outline-warning btn-sm ms-2" onclick="loadCertificates()">重试</button>
+                    </div>
+                `;
+            }
+        }
+
+        // 刷新证书列表
+        function refreshCertificates() {
+            loadCertificates();
+        }
+
+        // 续期证书
+        async function renewCertificate(domain) {
+            if (!confirm(`确定要为域名 ${domain} 续期证书吗？`)) {
+                return;
+            }
+
+            try {
+                const response = await apiRequest('/api/v1/certificates/renew', {
+                    method: 'POST',
+                    body: JSON.stringify({ domain: domain })
+                });
+
+                if (response.ok) {
+                    alert('证书续期成功');
+                    loadCertificates();
+                } else {
+                    const error = await response.json();
+                    alert('续期失败: ' + error.error);
+                }
+            } catch (error) {
+                console.error('续期证书失败:', error);
+                alert('续期失败: ' + error.message);
+            }
+        }
+
+        // 删除证书
+        async function deleteCertificate(domain) {
+            if (!confirm(`确定要删除域名 ${domain} 的证书吗？此操作不可撤销。`)) {
+                return;
+            }
+
+            alert('删除证书功能将在后续版本中实现');
+        }
+
+        // 加载域名选项到证书表单
+        async function loadCertDomainOptions() {
+            try {
+                const response = await apiRequest('/api/v1/domains');
+                const domains = await response.json();
+                
+                const domainSelect = document.getElementById('cert-domain');
+                domainSelect.innerHTML = '<option value="">选择要签发证书的域名</option>';
+                
+                if (domains && domains.length > 0) {
+                    domains.forEach(domain => {
+                        const option = document.createElement('option');
+                        option.value = domain.domain || domain.name;
+                        option.textContent = domain.domain || domain.name;
+                        domainSelect.appendChild(option);
+                    });
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = '暂无可用域名，请先添加域名';
+                    option.disabled = true;
+                    domainSelect.appendChild(option);
+                }
+            } catch (error) {
+                console.error('加载证书域名选项失败:', error);
+                const domainSelect = document.getElementById('cert-domain');
+                domainSelect.innerHTML = '<option value="">加载域名失败</option>';
+            }
+        }
+        
+        // 用户模态框事件监听 - 当模态框显示时加载域名选项
+        const addUserModal = document.getElementById('add-user-modal');
+        if (addUserModal) {
+            addUserModal.addEventListener('show.bs.modal', function () {
+                loadDomainOptions();
+            });
+        }
+        
+        // 证书模态框事件监听 - 当模态框显示时加载域名选项
+        const issueCertModal = document.getElementById('issue-cert-modal');
+        if (issueCertModal) {
+            issueCertModal.addEventListener('show.bs.modal', function () {
+                loadCertDomainOptions();
+            });
         }
     </script>
 
@@ -1071,6 +1315,64 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                     <button type="submit" form="add-user-form" class="btn btn-primary">创建用户</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 签发证书模态框 -->
+    <div class="modal fade" id="issue-cert-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">签发SSL证书</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="issue-cert-form">
+                        <div class="mb-3">
+                            <label for="cert-domain" class="form-label">域名</label>
+                            <select class="form-select" id="cert-domain" name="domain" required>
+                                <option value="">选择要签发证书的域名</option>
+                            </select>
+                            <div class="form-text">请选择已配置DNS记录的域名</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">证书类型</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cert_type" id="cert-single" value="single" checked>
+                                <label class="form-check-label" for="cert-single">
+                                    单域名证书 (domain.com)
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="cert_type" id="cert-wildcard" value="wildcard">
+                                <label class="form-check-label" for="cert-wildcard">
+                                    通配符证书 (*.domain.com)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="cert-email" class="form-label">邮箱地址</label>
+                            <input type="email" class="form-control" id="cert-email" name="email" required 
+                                   placeholder="admin@domain.com">
+                            <div class="form-text">用于Let's Encrypt通知和证书到期提醒</div>
+                        </div>
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> 注意事项</h6>
+                            <ul class="mb-0">
+                                <li>确保域名已正确配置DNS记录指向本服务器</li>
+                                <li>证书签发过程可能需要几分钟时间</li>
+                                <li>通配符证书需要DNS验证，请确保可以修改DNS记录</li>
+                            </ul>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="submit" form="issue-cert-form" class="btn btn-primary" id="issue-cert-submit">
+                        <i class="fas fa-certificate"></i> 开始签发
+                    </button>
                 </div>
             </div>
         </div>
