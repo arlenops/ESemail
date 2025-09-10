@@ -685,6 +685,35 @@
                     loadDashboardData();
                 }
             }, 30000); // 30秒自动刷新
+            
+            // 模态框事件绑定 - 确保在DOM加载完成后绑定
+            // 用户模态框事件监听 - 当模态框显示时加载域名选项
+            const addUserModal = document.getElementById('add-user-modal');
+            if (addUserModal) {
+                console.log('用户模态框元素找到，绑定事件...');
+                addUserModal.addEventListener('show.bs.modal', function () {
+                    console.log('用户模态框显示事件触发，开始加载域名选项');
+                    loadDomainOptions();
+                });
+            } else {
+                console.error('未找到用户模态框元素: add-user-modal');
+            }
+            
+            // 证书模态框事件监听 - 当模态框显示时加载域名选项
+            const issueCertModal = document.getElementById('issue-cert-modal');
+            if (issueCertModal) {
+                issueCertModal.addEventListener('show.bs.modal', function () {
+                    loadCertDomainOptions();
+                });
+            }
+            
+            // 弹窗初始化按钮事件监听
+            const initSystemBtn = document.getElementById('init-system-btn');
+            if (initSystemBtn) {
+                initSystemBtn.addEventListener('click', function () {
+                    initializeSystemFromModal();
+                });
+            }
         });
 
         // 加载仪表板数据
@@ -1365,29 +1394,6 @@
             }
         }
         
-        // 用户模态框事件监听 - 当模态框显示时加载域名选项
-        const addUserModal = document.getElementById('add-user-modal');
-        if (addUserModal) {
-            addUserModal.addEventListener('show.bs.modal', function () {
-                loadDomainOptions();
-            });
-        }
-        
-        // 证书模态框事件监听 - 当模态框显示时加载域名选项
-        const issueCertModal = document.getElementById('issue-cert-modal');
-        if (issueCertModal) {
-            issueCertModal.addEventListener('show.bs.modal', function () {
-                loadCertDomainOptions();
-            });
-        }
-        
-        // 弹窗初始化按钮事件监听
-        const initSystemBtn = document.getElementById('init-system-btn');
-        if (initSystemBtn) {
-            initSystemBtn.addEventListener('click', function () {
-                initializeSystemFromModal();
-            });
-        }
     </script>
 
     <!-- 添加域名模态框 -->
