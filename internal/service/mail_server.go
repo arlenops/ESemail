@@ -257,7 +257,7 @@ func (ms *MailServer) GetDKIMPublicKey() (string, error) {
 }
 
 // GetRecommendedDNSRecords 获取推荐的DNS记录
-func (ms *MailServer) GetRecommendedDNSRecords() ([]DNSRecord, error) {
+func (ms *MailServer) GetRecommendedDNSRecords() ([]MailDNSRecord, error) {
 	if ms.authService == nil {
 		return nil, fmt.Errorf("认证服务未初始化")
 	}

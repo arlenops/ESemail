@@ -295,15 +295,6 @@ func (h *MailServerHandler) SearchMessages(c *gin.Context) {
 
 // GetDKIMRecord 获取DKIM DNS记录
 func (h *MailServerHandler) GetDKIMRecord(c *gin.Context) {
-	publicKey, err := h.mailServer.GetDKIMPublicKey()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "获取DKIM公钥失败: " + err.Error(),
-		})
-		return
-	}
-
 	// 获取DNS记录名称
 	authService := h.mailServer.GetAuthService()
 	if authService == nil {

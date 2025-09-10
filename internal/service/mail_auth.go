@@ -332,7 +332,7 @@ func (mas *MailAuthService) GetDKIMDNSRecord() (string, string, error) {
 
 // CheckSPFRecord 检查SPF记录配置
 func (mas *MailAuthService) CheckSPFRecord(domain string) (bool, string, error) {
-	txtRecords, err := mas.dnsService.QueryTXT(domain)
+	txtRecords, err := net.LookupTXT(domain)
 	if err != nil {
 		return false, "", fmt.Errorf("查询SPF记录失败: %v", err)
 	}
@@ -347,47 +347,47 @@ func (mas *MailAuthService) CheckSPFRecord(domain string) (bool, string, error) 
 }
 
 // GenerateRecommendedDNSRecords 生成推荐的DNS记录
-func (mas *MailAuthService) GenerateRecommendedDNSRecords(domain string) ([]DNSRecord, error) {
-	var records []DNSRecord
+func (mas *MailAuthService) GenerateRecommendedDNSRecords(domain string) ([]MailDNSRecord, error) {
+	var records []MailDNSRecord
 	
 	// DKIM记录
 	dkimName, dkimValue, err := mas.GetDKIMDNSRecord()
 	if err == nil {
-		records = append(records, DNSRecord{
+		records = append(records, MailDNSRecord{
 			Type:        "TXT",
 			Name:        dkimName,
 			Value:       dkimValue,
 			Description: "DKIM公钥记录，用于邮件签名验证",
-			Priority:    "高",
+			Priority:    1,
 		})
 	}
 	
 	// SPF记录
-	records = append(records, DNSRecord{
+	records = append(records, MailDNSRecord{
 		Type:        "TXT",
 		Name:        domain,
 		Value:       "v=spf1 mx a ip4:YOUR_SERVER_IP -all",
 		Description: "SPF记录，指定授权发送邮件的服务器",
-		Priority:    "高",
+		Priority:    1,
 	})
 	
 	// DMARC记录
-	records = append(records, DNSRecord{
+	records = append(records, MailDNSRecord{
 		Type:        "TXT",
 		Name:        "_dmarc." + domain,
 		Value:       "v=DMARC1; p=quarantine; rua=mailto:dmarc@" + domain,
 		Description: "DMARC记录，定义邮件认证失败时的处理策略",
-		Priority:    "中",
+		Priority:    2,
 	})
 	
 	return records, nil
 }
 
-// DNSRecord DNS记录结构
-type DNSRecord struct {
+// MailDNSRecord 邮件DNS记录结构
+type MailDNSRecord struct {
 	Type        string `json:"type"`
 	Name        string `json:"name"`
 	Value       string `json:"value"`
 	Description string `json:"description"`
-	Priority    string `json:"priority"`
+	Priority    int    `json:"priority"`
 }
