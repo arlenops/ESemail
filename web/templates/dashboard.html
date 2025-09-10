@@ -12,6 +12,58 @@
     <script src="/static/js/chart.js"></script>
     <script src="/static/js/dashboard.js"></script>
     <script src="/static/js/mail.js"></script>
+    
+    <style>
+        /* 修复模态框中下拉菜单被遮挡的问题 */
+        .modal-body {
+            overflow: visible;
+        }
+        
+        /* 确保下拉菜单在模态框中有足够的z-index */
+        .modal .dropdown-menu,
+        .modal .form-select {
+            position: relative;
+            z-index: 1060;
+        }
+        
+        /* 当下拉菜单展开时提供更多空间 */
+        .modal-dialog {
+            margin-top: 1.75rem;
+            margin-bottom: 1.75rem;
+        }
+        
+        /* 增加用户模态框的最小高度以容纳下拉选项 */
+        #add-user-modal .modal-content {
+            min-height: 500px;
+        }
+        
+        /* 修复用户模态框特殊样式 */
+        #add-user-modal .modal-body {
+            padding-bottom: 3rem;
+            overflow: visible;
+        }
+        
+        /* 确保select下拉选项可见 */
+        .form-select:focus {
+            z-index: 1061;
+        }
+        
+        /* 为域名选择框添加特殊样式确保可见 */
+        #user-domain {
+            position: relative;
+            z-index: 1061;
+        }
+        
+        /* 确保模态框不会裁剪下拉内容 */
+        .modal.show .modal-dialog {
+            transform: none;
+        }
+        
+        /* 为下拉选项添加更高的z-index */
+        .form-select option {
+            z-index: 1062;
+        }
+    </style>
 </head>
 <body>
     <!-- 顶部导航栏 -->
@@ -737,6 +789,14 @@
                     button.innerHTML = '<i class="fas fa-check"></i> 初始化完成';
                     setTimeout(() => {
                         loadDashboardData(); // 初始化完成后刷新数据
+                        // 关闭初始化弹窗（如果打开）
+                        const initModal = document.getElementById('system-init-modal');
+                        if (initModal) {
+                            const modalInstance = bootstrap.Modal.getInstance(initModal);
+                            if (modalInstance) {
+                                modalInstance.hide();
+                            }
+                        }
                     }, 1000);
                 } else {
                     steps.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 初始化失败: ${data.message || '未知错误'}</div>`;
@@ -997,6 +1057,64 @@
             }
         }
 
+        // 从弹窗执行系统初始化
+        function initializeSystemFromModal() {
+            const button = document.getElementById('init-system-btn');
+            const modal = document.getElementById('system-init-modal');
+            const progressContainer = modal.querySelector('#init-progress');
+            const stepsContainer = modal.querySelector('#init-steps');
+            
+            button.disabled = true;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 初始化中...';
+            
+            if (progressContainer) {
+                progressContainer.classList.remove('d-none');
+            }
+            
+            // 调用系统初始化API
+            fetch('/api/v1/system/init', {
+                method: 'POST',
+                headers: getAuthHeaders()
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const progressBar = modal.querySelector('.progress-bar');
+                    if (progressBar) {
+                        progressBar.style.width = '100%';
+                    }
+                    if (stepsContainer) {
+                        stepsContainer.innerHTML = '<div class="alert alert-success"><i class="fas fa-check"></i> 系统初始化完成！</div>';
+                    }
+                    button.innerHTML = '<i class="fas fa-check"></i> 初始化完成';
+                    
+                    setTimeout(() => {
+                        // 关闭弹窗
+                        const modalInstance = bootstrap.Modal.getInstance(modal);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                        // 刷新页面数据
+                        loadDashboardData();
+                    }, 2000);
+                } else {
+                    if (stepsContainer) {
+                        stepsContainer.innerHTML = `<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 初始化失败: ${data.message || '未知错误'}</div>`;
+                    }
+                    button.innerHTML = '<i class="fas fa-times"></i> 初始化失败';
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Modal init error:', error);
+                if (stepsContainer) {
+                    stepsContainer.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle"></i> 网络连接错误，请检查服务状态</div>';
+                }
+                button.innerHTML = '<i class="fas fa-redo"></i> 重试';
+                button.disabled = false;
+            });
+        }
+
         // 邮件管理相关函数
         async function loadUserEmailOptions() {
             try {
@@ -1038,21 +1156,40 @@
 
         // 加载域名选项到用户表单
         async function loadDomainOptions() {
+            console.log('开始加载域名选项...');
             try {
                 const response = await apiRequest('/api/v1/domains');
+                console.log('域名API响应状态:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const domains = await response.json();
+                console.log('获取到的域名数据:', domains);
                 
                 const domainSelect = document.getElementById('user-domain');
+                if (!domainSelect) {
+                    console.error('未找到user-domain选择框');
+                    return;
+                }
+                
                 domainSelect.innerHTML = '<option value="">选择域名</option>';
                 
                 if (domains && domains.length > 0) {
+                    console.log(`正在添加 ${domains.length} 个域名选项`);
                     domains.forEach(domain => {
-                        const option = document.createElement('option');
-                        option.value = domain.domain || domain.name;
-                        option.textContent = domain.domain || domain.name;
-                        domainSelect.appendChild(option);
+                        const domainName = domain.domain || domain.name;
+                        if (domainName) {
+                            const option = document.createElement('option');
+                            option.value = domainName;
+                            option.textContent = domainName;
+                            domainSelect.appendChild(option);
+                            console.log('已添加域名选项:', domainName);
+                        }
                     });
                 } else {
+                    console.log('没有找到可用域名');
                     const option = document.createElement('option');
                     option.value = '';
                     option.textContent = '暂无可用域名，请先添加域名';
@@ -1062,7 +1199,9 @@
             } catch (error) {
                 console.error('加载域名选项失败:', error);
                 const domainSelect = document.getElementById('user-domain');
-                domainSelect.innerHTML = '<option value="">加载域名失败</option>';
+                if (domainSelect) {
+                    domainSelect.innerHTML = `<option value="">加载域名失败: ${error.message}</option>`;
+                }
             }
         }
 
@@ -1239,6 +1378,14 @@
         if (issueCertModal) {
             issueCertModal.addEventListener('show.bs.modal', function () {
                 loadCertDomainOptions();
+            });
+        }
+        
+        // 弹窗初始化按钮事件监听
+        const initSystemBtn = document.getElementById('init-system-btn');
+        if (initSystemBtn) {
+            initSystemBtn.addEventListener('click', function () {
+                initializeSystemFromModal();
             });
         }
     </script>
