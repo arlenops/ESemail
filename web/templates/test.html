@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{.title}}</title>
+</head>
+<body>
+    <h1>测试页面</h1>
+    <p>如果您能看到这个页面，说明模板系统正常工作。</p>
+    
+    <h2>状态信息</h2>
+    <p>当前步骤: {{.state.CurrentStep}}</p>
+    <p>已完成步骤数: {{len .state.CompletedSteps}}</p>
+    <p>设置完成: {{.state.IsSetupComplete}}</p>
+    
+    <h2>步骤列表</h2>
+    {{range $index, $step := .steps}}
+        <div>
+            <h3>步骤 {{$step.ID}}: {{$step.Title}}</h3>
+            <p>{{$step.Description}}</p>
+            <p>状态: 完成={{.IsCompleted}}, 当前={{.IsCurrent}}, 可访问={{.IsAccessible}}</p>
+        </div>
+    {{end}}
+</body>
+</html>

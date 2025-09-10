@@ -203,6 +203,36 @@ func SetupRouter(
 		c.HTML(http.StatusOK, "workflow.html", data)
 	})
 
+	// 简单测试页面
+	r.GET("/test", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "test.html", gin.H{
+			"title": "测试页面",
+			"state": &service.WorkflowState{
+				CurrentStep:      1,
+				CompletedSteps:   []int{},
+				IsSetupComplete:  false,
+				UnlockedFeatures: []string{},
+			},
+			"steps": []WorkflowStepWithState{
+				{
+					WorkflowStep: service.WorkflowStep{
+						ID:          1,
+						Title:       "测试步骤",
+						Description: "这是一个测试步骤",
+					},
+					IsCompleted:  false,
+					IsCurrent:    true,
+					IsAccessible: true,
+				},
+			},
+			"current_step": &service.WorkflowStep{
+				ID:          1,
+				Title:       "测试步骤",
+				Description: "这是一个测试步骤",
+			},
+		})
+	})
+
 	api := r.Group("/api/v1")
 	{
 		// 公开接口（无需认证）
