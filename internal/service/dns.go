@@ -324,6 +324,8 @@ func (s *DNSService) checkTXTRecord(record *DNSRecord) {
 	switch {
 	case strings.Contains(record.Name, "_dmarc"):
 		s.checkDMARCRecord(record, txtRecords)
+	case strings.Contains(record.Name, "_adsp._domainkey"):
+		s.checkADSPRecord(record, txtRecords)
 	case strings.Contains(record.Name, "_domainkey"):
 		s.checkDKIMRecord(record, txtRecords)
 	case strings.Contains(record.Expected, "v=spf1"):
@@ -386,6 +388,28 @@ func (s *DNSService) checkDKIMRecord(record *DNSRecord, txtRecords []string) {
 		}
 	}
 	record.Status = "missing"
+}
+
+func (s *DNSService) checkADSPRecord(record *DNSRecord, txtRecords []string) {
+	log.Printf("验证ADSP记录，期望: %s", record.Expected)
+	
+	for _, txt := range txtRecords {
+		log.Printf("检查ADSP记录值: %s", txt)
+		record.Actual = txt
+		
+		// ADSP记录可能的值: "unknown", "all", "discardable"
+		// 或者格式为 "dkim=all"
+		if txt == record.Expected || 
+		   strings.Contains(txt, "dkim=") || 
+		   txt == "all" || txt == "unknown" || txt == "discardable" {
+			record.Status = "valid"
+			log.Printf("ADSP记录验证通过: %s", txt)
+			return
+		}
+	}
+	
+	log.Printf("ADSP记录验证失败")
+	record.Status = "invalid"
 }
 
 func (s *DNSService) generateSummary(records []DNSRecord) DNSSummary {
