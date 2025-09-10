@@ -888,8 +888,90 @@
         }
 
         // 重新检查DNS
-        function recheckDNS(domain) {
-            alert('DNS检查功能将在后续版本中实现');
+        async function recheckDNS(domain) {
+            try {
+                // 显示检查中提示
+                const modal = document.getElementById('dns-records-modal');
+                const modalBody = modal.querySelector('.modal-body');
+                const originalContent = modalBody.innerHTML;
+                
+                modalBody.innerHTML = `
+                    <div class="text-center py-4">
+                        <div class="loading-spinner mb-3"></div>
+                        <h5>正在检查DNS记录...</h5>
+                        <p class="text-muted">这可能需要几秒钟时间</p>
+                    </div>
+                `;
+                
+                const response = await apiRequest(`/api/v1/domains/${domain}/dns/check`, {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // 更新模态框内容显示检查结果
+                    let html = `
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            DNS记录检查完成 - ${new Date().toLocaleString()}
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered">
+                                <thead>
+                                    <tr>
+                                        <th>类型</th>
+                                        <th>名称</th>
+                                        <th>值</th>
+                                        <th>TTL</th>
+                                        <th>状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                    `;
+                    
+                    result.records.forEach(record => {
+                        const statusBadge = record.status === 'found' ? 
+                            '<span class="badge bg-success">已配置</span>' : 
+                            record.status === 'missing' ? 
+                            '<span class="badge bg-warning">未配置</span>' : 
+                            '<span class="badge bg-danger">错误</span>';
+                            
+                        html += `
+                            <tr>
+                                <td><code>${record.type}</code></td>
+                                <td><code>${record.name}</code></td>
+                                <td><code class="text-break">${record.value}</code></td>
+                                <td>${record.ttl || 300}</td>
+                                <td>${statusBadge}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += `
+                                    </tbody>
+                                </table>
+                            </div>
+                    `;
+                    
+                    modalBody.innerHTML = html;
+                    
+                    // 显示成功提示
+                    const alertHtml = `
+                        <div class="alert alert-success alert-dismissible fade show" role="alert">
+                            <i class="fas fa-check-circle"></i> DNS记录检查完成！
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    `;
+                    modalBody.insertAdjacentHTML('afterbegin', alertHtml);
+                    
+                } else {
+                    modalBody.innerHTML = originalContent;
+                    alert('DNS检查失败: ' + result.error);
+                }
+            } catch (error) {
+                console.error('DNS检查失败:', error);
+                alert('DNS检查失败: ' + error.message);
+            }
         }
 
         // 删除域名

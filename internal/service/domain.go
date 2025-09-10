@@ -3,7 +3,10 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -122,12 +125,121 @@ func (s *DomainService) DeleteDomain(domain string) error {
 }
 
 func (s *DomainService) GetDNSRecords(domain string) ([]DNSRecord, error) {
-	// 使用DNS服务生成标准记录
-	serverIP := "127.0.0.1" // TODO: 从配置获取
+	// 获取服务器外网IP
+	serverIP, err := s.getServerPublicIP()
+	if err != nil {
+		log.Printf("获取服务器IP失败，使用默认值: %v", err)
+		serverIP = "YOUR_SERVER_IP" // 占位符，需要用户配置
+	}
+	
 	mailServer := fmt.Sprintf("mail.%s", domain)
 	
+	// 使用DNS服务生成标准记录
 	status := s.dnsService.CheckDomainDNS(domain, serverIP, mailServer)
-	return status.Records, nil
+	
+	// 转换DNS记录格式以匹配models.DNSRecord
+	var records []DNSRecord
+	for _, record := range status.Records {
+		records = append(records, DNSRecord{
+			Type:     record.Type,
+			Name:     record.Name,
+			Value:    record.Value,
+			TTL:      record.TTL,
+			Status:   record.Status,
+			Required: true,
+		})
+	}
+	
+	return records, nil
+}
+
+// CheckDNSRecords 检查域名的DNS记录实际配置状态
+func (s *DomainService) CheckDNSRecords(domain string) ([]DNSRecord, error) {
+	// 获取服务器外网IP
+	serverIP, err := s.getServerPublicIP()
+	if err != nil {
+		log.Printf("获取服务器IP失败，使用默认值: %v", err)
+		serverIP = "YOUR_SERVER_IP" // 占位符，需要用户配置
+	}
+	
+	mailServer := fmt.Sprintf("mail.%s", domain)
+	
+	// 使用DNS服务进行实际的DNS记录检查
+	status := s.dnsService.CheckDomainDNS(domain, serverIP, mailServer)
+	
+	// 转换DNS记录格式以匹配models.DNSRecord，包含实际检查结果
+	var records []DNSRecord
+	for _, record := range status.Records {
+		// 根据检查结果映射状态
+		mappedStatus := "missing"
+		switch record.Status {
+		case "valid":
+			mappedStatus = "found"
+		case "invalid":
+			mappedStatus = "error"
+		case "missing":
+			mappedStatus = "missing"
+		case "error":
+			mappedStatus = "error"
+		}
+		
+		records = append(records, DNSRecord{
+			Type:     record.Type,
+			Name:     record.Name,
+			Value:    record.Expected, // 期望值
+			TTL:      record.TTL,
+			Status:   mappedStatus,
+			Required: true,
+		})
+	}
+	
+	return records, nil
+}
+
+// getServerPublicIP 获取服务器外网IP地址
+func (s *DomainService) getServerPublicIP() (string, error) {
+	// 方法1: 通过访问外部服务获取
+	resp, err := http.Get("https://ifconfig.me/ip")
+	if err == nil {
+		defer resp.Body.Close()
+		if resp.StatusCode == 200 {
+			body, err := io.ReadAll(resp.Body)
+			if err == nil {
+				ip := strings.TrimSpace(string(body))
+				if net.ParseIP(ip) != nil {
+					return ip, nil
+				}
+			}
+		}
+	}
+	
+	// 方法2: 尝试其他服务
+	services := []string{
+		"https://ipinfo.io/ip",
+		"https://api.ipify.org",
+		"https://checkip.amazonaws.com",
+	}
+	
+	for _, service := range services {
+		resp, err := http.Get(service)
+		if err != nil {
+			continue
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode == 200 {
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				continue
+			}
+			ip := strings.TrimSpace(string(body))
+			if net.ParseIP(ip) != nil {
+				return ip, nil
+			}
+		}
+	}
+	
+	return "", fmt.Errorf("无法获取服务器外网IP")
 }
 
 func (s *DomainService) checkDNSRecord(recordType, domain string) string {

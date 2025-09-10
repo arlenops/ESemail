@@ -184,6 +184,7 @@ func SetupRouter(
 				domains.POST("", NewDomainHandler(domainService).AddDomain)
 				domains.DELETE("/:domain", NewDomainHandler(domainService).DeleteDomain)
 				domains.GET("/:domain/dns", NewDomainHandler(domainService).GetDNSRecords)
+				domains.POST("/:domain/dns/check", NewDomainHandler(domainService).CheckDNSRecords)
 			}
 
 			// 用户管理

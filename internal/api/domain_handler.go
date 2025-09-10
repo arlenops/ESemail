@@ -66,3 +66,19 @@ func (h *DomainHandler) GetDNSRecords(c *gin.Context) {
 
 	c.JSON(http.StatusOK, records)
 }
+
+func (h *DomainHandler) CheckDNSRecords(c *gin.Context) {
+	domain := c.Param("domain")
+
+	records, err := h.domainService.CheckDNSRecords(domain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"domain":  domain,
+		"records": records,
+		"message": "DNS检查完成",
+	})
+}

@@ -1,10 +1,17 @@
 package service
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -79,37 +86,122 @@ func (s *DNSService) CheckDomainDNS(domain, serverIP, mailServer string) *Domain
 	return status
 }
 
+// getDKIMPublicKey 获取或生成DKIM公钥
+func (s *DNSService) getDKIMPublicKey(domain string) (string, error) {
+	// DKIM密钥存储路径
+	keyDir := "./data/dkim"
+	privateKeyPath := filepath.Join(keyDir, fmt.Sprintf("%s.private", domain))
+	publicKeyPath := filepath.Join(keyDir, fmt.Sprintf("%s.public", domain))
+	
+	// 确保目录存在
+	if err := os.MkdirAll(keyDir, 0755); err != nil {
+		return "", fmt.Errorf("创建DKIM密钥目录失败: %v", err)
+	}
+	
+	// 检查是否已存在密钥
+	if _, err := os.Stat(publicKeyPath); err == nil {
+		// 读取现有公钥
+		publicKeyData, err := os.ReadFile(publicKeyPath)
+		if err != nil {
+			return "", fmt.Errorf("读取DKIM公钥失败: %v", err)
+		}
+		return string(publicKeyData), nil
+	}
+	
+	// 生成新的RSA密钥对
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return "", fmt.Errorf("生成RSA密钥失败: %v", err)
+	}
+	
+	// 保存私钥
+	privateKeyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	privateKeyPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privateKeyBytes,
+	})
+	
+	if err := os.WriteFile(privateKeyPath, privateKeyPEM, 0600); err != nil {
+		return "", fmt.Errorf("保存DKIM私钥失败: %v", err)
+	}
+	
+	// 生成公钥的base64编码（用于DNS TXT记录）
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return "", fmt.Errorf("编码DKIM公钥失败: %v", err)
+	}
+	
+	publicKeyBase64 := base64.StdEncoding.EncodeToString(publicKeyBytes)
+	
+	// DKIM TXT记录格式
+	dkimRecord := fmt.Sprintf("v=DKIM1; k=rsa; p=%s", publicKeyBase64)
+	
+	// 保存公钥记录
+	if err := os.WriteFile(publicKeyPath, []byte(dkimRecord), 0644); err != nil {
+		return "", fmt.Errorf("保存DKIM公钥记录失败: %v", err)
+	}
+	
+	log.Printf("为域名 %s 生成新的DKIM密钥", domain)
+	return dkimRecord, nil
+}
+
 func (s *DNSService) generateRequiredRecords(domain, serverIP, mailServer string) []DNSRecord {
+	// 获取或生成DKIM公钥
+	dkimPublicKey, err := s.getDKIMPublicKey(domain)
+	if err != nil {
+		log.Printf("获取DKIM公钥失败: %v", err)
+		dkimPublicKey = "v=DKIM1; k=rsa; p=请先生成DKIM密钥"
+	}
+	
 	return []DNSRecord{
 		{
 			Type:        "A",
 			Name:        mailServer,
+			Value:       serverIP,
 			Expected:    serverIP,
+			TTL:         300,
 			Description: "邮件服务器A记录，指向服务器IP地址",
 		},
 		{
-			Type:        "MX",
+			Type:        "MX", 
 			Name:        domain,
+			Value:       fmt.Sprintf("10 %s", mailServer),
 			Expected:    fmt.Sprintf("10 %s", mailServer),
+			Priority:    10,
+			TTL:         300,
 			Description: "邮件交换记录，指定邮件服务器",
 		},
 		{
 			Type:        "TXT",
 			Name:        domain,
-			Expected:    "v=spf1 mx ~all",
-			Description: "SPF记录，防止邮件欺骗",
+			Value:       fmt.Sprintf("v=spf1 mx include:%s ~all", mailServer),
+			Expected:    fmt.Sprintf("v=spf1 mx include:%s ~all", mailServer),
+			TTL:         300,
+			Description: "SPF记录，防止邮件欺骗，允许从MX记录中的服务器发送邮件",
 		},
 		{
 			Type:        "TXT",
 			Name:        fmt.Sprintf("_dmarc.%s", domain),
-			Expected:    fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc@%s", domain),
-			Description: "DMARC记录，邮件验证策略",
+			Value:       fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc@%s; ruf=mailto:dmarc@%s; sp=none; aspf=r; adkim=r", domain, domain),
+			Expected:    fmt.Sprintf("v=DMARC1; p=none; rua=mailto:dmarc@%s; ruf=mailto:dmarc@%s; sp=none; aspf=r; adkim=r", domain, domain),
+			TTL:         300,
+			Description: "DMARC记录，邮件验证策略，建议初期使用p=none进行监控",
 		},
 		{
 			Type:        "TXT",
 			Name:        fmt.Sprintf("default._domainkey.%s", domain),
-			Expected:    "v=DKIM1; (DKIM公钥)",
-			Description: "DKIM记录，邮件签名验证（需要系统生成）",
+			Value:       dkimPublicKey,
+			Expected:    dkimPublicKey,
+			TTL:         300,
+			Description: "DKIM记录，邮件签名验证，包含RSA公钥用于验证邮件签名",
+		},
+		{
+			Type:        "TXT",
+			Name:        fmt.Sprintf("_adsp._domainkey.%s", domain),
+			Value:       "dkim=all",
+			Expected:    "dkim=all",
+			TTL:         300,
+			Description: "DKIM ADSP记录，声明该域名的所有邮件都应该有DKIM签名",
 		},
 	}
 }
