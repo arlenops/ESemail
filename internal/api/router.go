@@ -4,6 +4,7 @@ import (
 	"esemail/internal/config"
 	"esemail/internal/middleware"
 	"esemail/internal/service"
+	"fmt"
 	"html/template"
 	"net/http"
 	"os"
@@ -104,7 +105,9 @@ func SetupRouter(
 	templatesPath := findResourcePath("templates")
 	staticPath := findResourcePath("static")
 	
+	// 添加调试日志
 	if templatesPath != "" {
+		fmt.Printf("找到模板路径: %s\n", templatesPath)
 		// 定义自定义模板函数
 		funcMap := template.FuncMap{
 			"mul": func(a, b int) int { return a * b },
@@ -123,9 +126,14 @@ func SetupRouter(
 		// 创建自定义模板并设置函数映射
 		tmpl := template.Must(template.New("").Funcs(funcMap).ParseGlob(filepath.Join(templatesPath, "*")))
 		r.SetHTMLTemplate(tmpl)
+	} else {
+		fmt.Printf("警告: 未找到模板路径\n")
 	}
 	if staticPath != "" {
+		fmt.Printf("找到静态文件路径: %s\n", staticPath)
 		r.Static("/static", staticPath)
+	} else {
+		fmt.Printf("警告: 未找到静态文件路径\n")
 	}
 
 	r.GET("/", func(c *gin.Context) {
@@ -159,9 +167,14 @@ func SetupRouter(
 
 	// 工作流引导页面
 	r.GET("/workflow", func(c *gin.Context) {
+		fmt.Printf("访问 /workflow 路由\n")
+		
 		state := workflowService.GetCurrentState()
 		serviceSteps := workflowService.GetWorkflowSteps()
 		currentStep := workflowService.GetCurrentStep()
+
+		fmt.Printf("工作流状态: %+v\n", state)
+		fmt.Printf("步骤数量: %d\n", len(serviceSteps))
 
 		// 转换为包含运行时状态的步骤
 		var steps []WorkflowStepWithState
@@ -173,14 +186,21 @@ func SetupRouter(
 				IsAccessible: step.ID <= state.CurrentStep,
 			}
 			steps = append(steps, stepWithState)
+			fmt.Printf("步骤 %d: %s - 完成:%v, 当前:%v, 可访问:%v\n", 
+				step.ID, step.Title, stepWithState.IsCompleted, stepWithState.IsCurrent, stepWithState.IsAccessible)
 		}
 
-		c.HTML(http.StatusOK, "workflow.html", gin.H{
+		data := gin.H{
 			"title":        "ESemail 设置向导",
 			"state":        state,
 			"steps":        steps,
 			"current_step": currentStep,
-		})
+		}
+		
+		fmt.Printf("模板数据: %+v\n", data)
+		fmt.Printf("准备渲染 workflow.html 模板\n")
+		
+		c.HTML(http.StatusOK, "workflow.html", data)
 	})
 
 	api := r.Group("/api/v1")
