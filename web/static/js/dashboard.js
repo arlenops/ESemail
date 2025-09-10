@@ -608,7 +608,12 @@ async function addUser(e) {
         if (response.ok) {
             alert('用户创建成功');
             bootstrap.Modal.getInstance(document.getElementById('add-user-modal')).hide();
+            // 重置表单  
+            document.getElementById('add-user-form').reset();
+            // 刷新用户列表
             loadUsers();
+            // 同时刷新邮件发送页面的邮箱选项
+            loadUserEmailOptions();
         } else {
             const error = await response.json();
             alert('创建失败: ' + error.error);

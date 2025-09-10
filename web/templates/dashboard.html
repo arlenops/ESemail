@@ -284,10 +284,22 @@
                             </button>
                         </div>
                     </div>
-                    <div class="empty-state">
+                    <!-- 用户列表容器 -->
+                    <div id="users-list">
+                        <div class="text-center py-4">
+                            <div class="loading-spinner mb-3"></div>
+                            <p class="text-muted">正在加载用户列表...</p>
+                        </div>
+                    </div>
+                    
+                    <!-- 空状态提示 -->
+                    <div id="users-empty-state" class="empty-state" style="display: none;">
                         <i class="fas fa-users"></i>
-                        <h3>用户管理</h3>
-                        <p>管理邮件用户账户，设置密码和邮箱配额</p>
+                        <h3>暂无用户</h3>
+                        <p>点击"添加用户"按钮开始创建您的第一个邮件用户</p>
+                        <button type="button" class="btn btn-primary mt-3" data-bs-toggle="modal" data-bs-target="#add-user-modal">
+                            <i class="fas fa-user-plus"></i> 添加用户
+                        </button>
                     </div>
                 </div>
 
@@ -668,6 +680,7 @@
                         loadDomains();
                     } else if (targetSection === 'users-section') {
                         loadUsers();
+                        loadDomainsForUserForm();
                     } else if (targetSection === 'mail-section') {
                         loadUserEmailOptions();
                     } else if (targetSection === 'certificates-section') {
@@ -733,6 +746,16 @@
                 });
             } else {
                 console.error('未找到发送邮件标签');
+            }
+            
+            // 当邮件页面被激活时，立即加载邮箱选项
+            const mailNavLink = document.querySelector('a[data-section="mail"]');
+            if (mailNavLink) {
+                mailNavLink.addEventListener('click', function() {
+                    setTimeout(() => {
+                        loadUserEmailOptions();
+                    }, 100);
+                });
             }
         });
 
