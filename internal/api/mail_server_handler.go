@@ -46,7 +46,29 @@ func (h *MailServerHandler) SendEmail(c *gin.Context) {
 		return
 	}
 
-	if err := h.mailServer.SendEmail(req.From, req.To, req.Subject, req.Body, req.Headers); err != nil {
+	// 使用邮件权威性认证服务准备邮件
+	authService := h.mailServer.GetAuthService()
+	if authService == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "邮件认证服务未初始化",
+		})
+		return
+	}
+
+	// 认证并准备邮件
+	authenticatedMail, err := authService.AuthenticateAndPrepareEmail(
+		req.From, req.To, req.Subject, req.Body, req.Headers)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "邮件认证失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 发送邮件
+	if err := h.mailServer.SendAuthenticatedEmail(authenticatedMail); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   "发送邮件失败: " + err.Error(),
@@ -55,8 +77,10 @@ func (h *MailServerHandler) SendEmail(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "邮件发送成功",
+		"success":    true,
+		"message":    "邮件发送成功",
+		"auth_score": authenticatedMail.AuthScore,
+		"dkim_signed": authenticatedMail.DKIMSigned,
 	})
 }
 
@@ -266,5 +290,63 @@ func (h *MailServerHandler) SearchMessages(c *gin.Context) {
 		"success": true,
 		"data":    messages,
 		"count":   len(messages),
+	})
+}
+
+// GetDKIMRecord 获取DKIM DNS记录
+func (h *MailServerHandler) GetDKIMRecord(c *gin.Context) {
+	publicKey, err := h.mailServer.GetDKIMPublicKey()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取DKIM公钥失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取DNS记录名称
+	authService := h.mailServer.GetAuthService()
+	if authService == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "认证服务未初始化",
+		})
+		return
+	}
+
+	recordName, recordValue, err := authService.GetDKIMDNSRecord()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取DKIM DNS记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"record_name":  recordName,
+			"record_value": recordValue,
+			"record_type":  "TXT",
+			"description":  "DKIM公钥记录，用于邮件签名验证",
+		},
+	})
+}
+
+// GetRecommendedDNSRecords 获取推荐的DNS记录
+func (h *MailServerHandler) GetRecommendedDNSRecords(c *gin.Context) {
+	records, err := h.mailServer.GetRecommendedDNSRecords()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取DNS记录失败: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    records,
 	})
 }

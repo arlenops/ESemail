@@ -16,6 +16,7 @@ type MailServer struct {
 	mailStorage   *MailStorage
 	userService   *UserService
 	domainService *DomainService
+	authService   *MailAuthService // 添加认证服务
 	config        *MailServerConfig
 	running       bool
 	mutex         sync.RWMutex
@@ -40,6 +41,27 @@ type MailServerConfig struct {
 func NewMailServer(config *MailServerConfig, userService *UserService, domainService *DomainService) (*MailServer, error) {
 	// 初始化邮件存储
 	mailStorage := NewMailStorage(filepath.Join(config.DataDir, "mail"))
+	
+	// 初始化DNS服务
+	dnsService := NewDNSService()
+	
+	// 初始化邮件权威性认证服务
+	authConfig := &MailAuthConfig{
+		Domain:              config.Domain,
+		DKIMSelector:        "default",
+		DKIMKeyPath:         filepath.Join(config.DataDir, "dkim"),
+		EnableSPFCheck:      true,
+		EnableDMARCCheck:    true,
+		EnableContentFilter: true,
+		MaxMessageSize:      config.MaxMessageSize,
+		TrustedIPs:          []string{},
+	}
+	
+	authService, err := NewMailAuthService(authConfig, domainService, dnsService)
+	if err != nil {
+		log.Printf("警告: 邮件认证服务初始化失败: %v", err)
+		// 可以继续运行，但功能会受限
+	}
 	
 	// 配置TLS
 	var tlsConfig *tls.Config
@@ -102,6 +124,7 @@ func NewMailServer(config *MailServerConfig, userService *UserService, domainSer
 		mailStorage:   mailStorage,
 		userService:   userService,
 		domainService: domainService,
+		authService:   authService,
 		config:        config,
 		running:       false,
 	}, nil
@@ -210,13 +233,35 @@ func (ms *MailServer) GetStatus() *MailServerStatus {
 	return status
 }
 
-// SendEmail 发送邮件
-func (ms *MailServer) SendEmail(from, to, subject, body string, headers map[string]string) error {
+// SendAuthenticatedEmail 发送经过认证的邮件
+func (ms *MailServer) SendAuthenticatedEmail(mail *AuthenticatedMail) error {
 	if !ms.running {
 		return fmt.Errorf("邮件服务器未运行")
 	}
 	
-	return ms.mailQueue.SendEmail(from, []string{to}, subject, body, headers)
+	// 使用认证邮件的完整头部信息发送
+	return ms.mailQueue.SendEmailWithHeaders(mail.From, mail.To, mail.Subject, mail.Body, mail.Headers)
+}
+
+// GetAuthService 获取认证服务
+func (ms *MailServer) GetAuthService() *MailAuthService {
+	return ms.authService
+}
+
+// GetDKIMPublicKey 获取DKIM公钥
+func (ms *MailServer) GetDKIMPublicKey() (string, error) {
+	if ms.authService == nil {
+		return "", fmt.Errorf("认证服务未初始化")
+	}
+	return ms.authService.GetDKIMPublicKey()
+}
+
+// GetRecommendedDNSRecords 获取推荐的DNS记录
+func (ms *MailServer) GetRecommendedDNSRecords() ([]DNSRecord, error) {
+	if ms.authService == nil {
+		return nil, fmt.Errorf("认证服务未初始化")
+	}
+	return ms.authService.GenerateRecommendedDNSRecords(ms.config.Domain)
 }
 
 // GetUserMessages 获取用户邮件

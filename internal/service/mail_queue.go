@@ -443,3 +443,9 @@ func isStandardHeader(header string) bool {
 	}
 	return standardHeaders[header]
 }
+
+// SendEmailWithHeaders 发送邮件（完整头部版本）
+func (q *MailQueue) SendEmailWithHeaders(from string, to []string, subject string, body string, headers map[string]string) error {
+	// 这是SendEmail的别名方法，因为原方法已经支持完整头部信息
+	return q.SendEmail(from, to, subject, body, headers)
+}

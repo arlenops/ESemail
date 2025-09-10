@@ -209,6 +209,8 @@ func SetupRouter(
 				mail.GET("/history/:id/download", mailServerHandler.DownloadEML)
 				mail.GET("/user-messages", mailServerHandler.GetUserMessages)
 				mail.GET("/search", mailServerHandler.SearchMessages)
+				mail.GET("/dkim-record", mailServerHandler.GetDKIMRecord)
+				mail.GET("/dns-records", mailServerHandler.GetRecommendedDNSRecords)
 			}
 
 			// 证书管理
