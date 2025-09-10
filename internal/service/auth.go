@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -14,6 +15,7 @@ import (
 type AuthService struct {
 	jwtSecret []byte
 	userStore map[string]*AdminUser // 临时存储，后续替换为数据库
+	mutex     sync.RWMutex          // 添加读写锁保护userStore
 }
 
 type AdminUser struct {
@@ -60,12 +62,15 @@ func NewAuthService() *AuthService {
 }
 
 func (s *AuthService) createDefaultAdmin() error {
-	// 检查是否已存在管理员
+	// 使用读锁检查是否已存在管理员
+	s.mutex.RLock()
 	for _, user := range s.userStore {
 		if user.Username == "admin" {
+			s.mutex.RUnlock()
 			return nil
 		}
 	}
+	s.mutex.RUnlock()
 	
 	// 设置默认密码为admin
 	defaultPassword := "admin"
@@ -83,7 +88,10 @@ func (s *AuthService) createDefaultAdmin() error {
 		CreatedAt:    time.Now(),
 	}
 	
+	// 使用写锁添加用户
+	s.mutex.Lock()
 	s.userStore[adminUser.ID] = adminUser
+	s.mutex.Unlock()
 	
 	// 记录默认密码（仅用于首次设置）
 	fmt.Printf("🔑 默认管理员账户已创建:\n")
@@ -95,7 +103,8 @@ func (s *AuthService) createDefaultAdmin() error {
 }
 
 func (s *AuthService) Login(req LoginRequest) (*LoginResponse, error) {
-	// 查找用户
+	// 使用读锁查找用户
+	s.mutex.RLock()
 	var user *AdminUser
 	for _, u := range s.userStore {
 		if u.Username == req.Username {
@@ -103,6 +112,7 @@ func (s *AuthService) Login(req LoginRequest) (*LoginResponse, error) {
 			break
 		}
 	}
+	s.mutex.RUnlock()
 	
 	if user == nil {
 		return nil, errors.New("用户名或密码错误")
@@ -117,8 +127,10 @@ func (s *AuthService) Login(req LoginRequest) (*LoginResponse, error) {
 		return nil, errors.New("用户名或密码错误")
 	}
 	
-	// 更新最后登录时间
+	// 使用写锁更新最后登录时间
+	s.mutex.Lock()
 	user.LastLogin = time.Now()
+	s.mutex.Unlock()
 	
 	// 生成JWT令牌
 	expiresAt := time.Now().Add(24 * time.Hour)
@@ -170,6 +182,8 @@ func (s *AuthService) VerifyToken(tokenString string) (*JWTClaims, error) {
 }
 
 func (s *AuthService) GetUserByID(userID string) *AdminUser {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	return s.userStore[userID]
 }
 
@@ -195,7 +209,11 @@ func (s *AuthService) ChangePassword(userID, oldPassword, newPassword string) er
 		return fmt.Errorf("生成密码哈希失败: %v", err)
 	}
 	
+	// 使用写锁更新密码
+	s.mutex.Lock()
 	user.PasswordHash = string(hashedPassword)
+	s.mutex.Unlock()
+	
 	return nil
 }
 

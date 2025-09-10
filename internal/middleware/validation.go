@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 )
@@ -98,20 +99,31 @@ func RequestValidationMiddleware(validationService *service.ValidationService) g
 func RateLimitMiddleware() gin.HandlerFunc {
 	// 存储每个IP的请求计数（实际项目中应使用Redis等外部存储）
 	requestCounts := make(map[string]int)
+	var mutex sync.RWMutex // 添加读写锁保护map
 	
 	return func(c *gin.Context) {
 		clientIP := c.ClientIP()
 		
-		// 简单的内存计数（仅用于演示）
-		if count, exists := requestCounts[clientIP]; exists {
+		// 使用读锁检查计数
+		mutex.RLock()
+		count, exists := requestCounts[clientIP]
+		mutex.RUnlock()
+		
+		if exists {
 			if count > 100 { // 每分钟最多100个请求
 				c.JSON(http.StatusTooManyRequests, gin.H{"error": "请求过于频繁"})
 				c.Abort()
 				return
 			}
+			// 使用写锁更新计数
+			mutex.Lock()
 			requestCounts[clientIP] = count + 1
+			mutex.Unlock()
 		} else {
+			// 使用写锁设置初始计数
+			mutex.Lock()
 			requestCounts[clientIP] = 1
+			mutex.Unlock()
 		}
 		
 		c.Next()
