@@ -221,10 +221,20 @@ func (s *DNSService) checkDNSRecord(record *DNSRecord) {
 }
 
 func (s *DNSService) checkARecord(record *DNSRecord) {
+	log.Printf("检查A记录: %s", record.Name)
+	
 	ips, err := net.LookupIP(record.Name)
 	if err != nil {
+		log.Printf("A记录查询失败 %s: %v", record.Name, err)
 		record.Status = "missing"
-		record.Actual = "DNS查询失败: " + err.Error()
+		record.Actual = fmt.Sprintf("DNS查询失败: %v", err)
+		return
+	}
+	
+	if len(ips) == 0 {
+		log.Printf("A记录未找到: %s", record.Name)
+		record.Status = "missing"
+		record.Actual = "未找到任何IP记录"
 		return
 	}
 	
@@ -232,6 +242,7 @@ func (s *DNSService) checkARecord(record *DNSRecord) {
 	for _, ip := range ips {
 		if ip.To4() != nil {
 			record.Actual = ip.String()
+			log.Printf("找到A记录 %s: %s (期望: %s)", record.Name, record.Actual, record.Expected)
 			if record.Actual == record.Expected {
 				record.Status = "valid"
 			} else {
@@ -241,19 +252,24 @@ func (s *DNSService) checkARecord(record *DNSRecord) {
 		}
 	}
 	
+	log.Printf("A记录未找到IPv4地址: %s", record.Name)
 	record.Status = "missing"
 	record.Actual = "未找到IPv4记录"
 }
 
 func (s *DNSService) checkMXRecord(record *DNSRecord) {
+	log.Printf("检查MX记录: %s", record.Name)
+	
 	mxRecords, err := net.LookupMX(record.Name)
 	if err != nil {
+		log.Printf("MX记录查询失败 %s: %v", record.Name, err)
 		record.Status = "missing"
-		record.Actual = "DNS查询失败: " + err.Error()
+		record.Actual = fmt.Sprintf("DNS查询失败: %v", err)
 		return
 	}
 	
 	if len(mxRecords) == 0 {
+		log.Printf("MX记录未找到: %s", record.Name)
 		record.Status = "missing"
 		record.Actual = "未找到MX记录"
 		return
@@ -263,6 +279,8 @@ func (s *DNSService) checkMXRecord(record *DNSRecord) {
 	mx := mxRecords[0]
 	record.Actual = fmt.Sprintf("%d %s", mx.Pref, strings.TrimSuffix(mx.Host, "."))
 	record.Priority = int(mx.Pref)
+	
+	log.Printf("找到MX记录 %s: %s (期望: %s)", record.Name, record.Actual, record.Expected)
 	
 	// 简单的匹配检查（忽略优先级的确切值，只要Host正确）
 	expectedParts := strings.SplitN(record.Expected, " ", 2)
@@ -280,18 +298,24 @@ func (s *DNSService) checkMXRecord(record *DNSRecord) {
 }
 
 func (s *DNSService) checkTXTRecord(record *DNSRecord) {
+	log.Printf("检查TXT记录: %s", record.Name)
+	
 	txtRecords, err := net.LookupTXT(record.Name)
 	if err != nil {
+		log.Printf("TXT记录查询失败 %s: %v", record.Name, err)
 		record.Status = "missing"
-		record.Actual = "DNS查询失败: " + err.Error()
+		record.Actual = fmt.Sprintf("DNS查询失败: %v", err)
 		return
 	}
 	
 	if len(txtRecords) == 0 {
+		log.Printf("TXT记录未找到: %s", record.Name)
 		record.Status = "missing"
 		record.Actual = "未找到TXT记录"
 		return
 	}
+	
+	log.Printf("找到TXT记录 %s: %v", record.Name, txtRecords)
 	
 	// 合并所有TXT记录
 	record.Actual = strings.Join(txtRecords, " | ")

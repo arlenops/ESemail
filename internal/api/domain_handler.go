@@ -3,6 +3,7 @@ package api
 import (
 	"esemail/internal/service"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -77,8 +78,24 @@ func (h *DomainHandler) CheckDNSRecords(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"domain":  domain,
-		"records": records,
-		"message": "DNS检查完成",
+		"domain":     domain,
+		"records":    records,
+		"message":    "DNS检查完成",
+		"checked_at": time.Now().Format("2006-01-02 15:04:05"),
+		"note":       "这是真实的DNS查询结果，不是模拟数据",
+	})
+}
+
+func (h *DomainHandler) TestDNSQuery(c *gin.Context) {
+	testDomain := c.Query("test_domain")
+	if testDomain == "" {
+		testDomain = "google.com" // 默认测试域名
+	}
+
+	results := h.domainService.TestDNSQuery(testDomain)
+	c.JSON(http.StatusOK, gin.H{
+		"test_domain": testDomain,
+		"results":     results,
+		"message":     "DNS测试查询完成",
 	})
 }

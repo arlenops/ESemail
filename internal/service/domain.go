@@ -197,6 +197,64 @@ func (s *DomainService) CheckDNSRecords(domain string) ([]models.DNSRecord, erro
 	return records, nil
 }
 
+// TestDNSQuery 测试DNS查询功能，验证是否为真实查询
+func (s *DomainService) TestDNSQuery(testDomain string) map[string]interface{} {
+	results := make(map[string]interface{})
+	
+	// 测试A记录查询
+	if ips, err := net.LookupIP(testDomain); err != nil {
+		results["A_record"] = map[string]interface{}{
+			"status": "error",
+			"error":  err.Error(),
+		}
+	} else {
+		var ipv4s []string
+		for _, ip := range ips {
+			if ip.To4() != nil {
+				ipv4s = append(ipv4s, ip.String())
+			}
+		}
+		results["A_record"] = map[string]interface{}{
+			"status": "success",
+			"ips":    ipv4s,
+		}
+	}
+	
+	// 测试MX记录查询
+	if mxRecords, err := net.LookupMX(testDomain); err != nil {
+		results["MX_record"] = map[string]interface{}{
+			"status": "error",
+			"error":  err.Error(),
+		}
+	} else {
+		var mxs []string
+		for _, mx := range mxRecords {
+			mxs = append(mxs, fmt.Sprintf("%d %s", mx.Pref, mx.Host))
+		}
+		results["MX_record"] = map[string]interface{}{
+			"status": "success",
+			"records": mxs,
+		}
+	}
+	
+	// 测试TXT记录查询  
+	if txtRecords, err := net.LookupTXT(testDomain); err != nil {
+		results["TXT_record"] = map[string]interface{}{
+			"status": "error",
+			"error":  err.Error(),
+		}
+	} else {
+		results["TXT_record"] = map[string]interface{}{
+			"status": "success",
+			"records": txtRecords,
+		}
+	}
+	
+	results["note"] = "这是真实的DNS查询结果，如果您的域名DNS记录未配置但显示'已配置'，可能是系统缓存或DNS解析错误"
+	
+	return results
+}
+
 // getServerPublicIP 获取服务器外网IP地址
 func (s *DomainService) getServerPublicIP() (string, error) {
 	// 方法1: 通过访问外部服务获取
