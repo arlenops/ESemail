@@ -140,8 +140,29 @@ func (h *DomainHandler) RequestSSLCertificate(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"message": "SSL证书申请成功",
+		"message": "SSL证书申请已提交",
 		"domain":  domain,
+		"note":    "请检查证书状态以确认申请结果",
+	})
+}
+
+// GetCertificateStatus 获取SSL证书状态
+func (h *DomainHandler) GetCertificateStatus(c *gin.Context) {
+	domain := c.Param("domain")
+
+	certInfo, err := h.domainService.GetCertificateStatus(domain)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":     true,
+		"domain":      domain,
+		"certificate": certInfo,
 	})
 }
 

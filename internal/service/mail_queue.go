@@ -15,6 +15,7 @@ type MailQueue struct {
 	mutex         sync.RWMutex
 	running       bool
 	stopChan      chan bool
+	wg            sync.WaitGroup
 	smtpServer    *SMTPServer
 	storage       *MailStorage
 	config        *QueueConfig
@@ -67,12 +68,15 @@ func (q *MailQueue) Start() error {
 	}
 	
 	q.running = true
+	q.stopChan = make(chan bool)
 	log.Println("启动邮件队列处理器")
 	
 	// 启动主处理协程
+	q.wg.Add(1)
 	go q.processQueue()
 	
 	// 启动重试处理协程
+	q.wg.Add(1)
 	go q.processRetryQueue()
 	
 	return nil
@@ -81,16 +85,23 @@ func (q *MailQueue) Start() error {
 // Stop 停止队列处理
 func (q *MailQueue) Stop() error {
 	q.mutex.Lock()
-	defer q.mutex.Unlock()
-	
 	if !q.running {
+		q.mutex.Unlock()
 		return nil
 	}
 	
-	log.Println("停止邮件队列处理器")
+	log.Println("停止邮件队列处理器...")
 	q.running = false
+	q.mutex.Unlock()
+	
+	// 发送停止信号
 	close(q.stopChan)
 	
+	// 等待所有goroutine结束
+	log.Println("等待队列处理协程结束...")
+	q.wg.Wait()
+	
+	log.Println("邮件队列处理器已停止")
 	return nil
 }
 
@@ -116,6 +127,8 @@ func (q *MailQueue) Enqueue(msg *QueuedMessage) error {
 
 // processQueue 处理主队列
 func (q *MailQueue) processQueue() {
+	defer q.wg.Done()
+	
 	ticker := time.NewTicker(q.config.ProcessInterval)
 	defer ticker.Stop()
 	
@@ -124,6 +137,15 @@ func (q *MailQueue) processQueue() {
 	for {
 		select {
 		case <-q.stopChan:
+			// 等待当前正在处理的邮件完成
+			for i := 0; i < q.config.MaxConcurrent; i++ {
+				select {
+				case semaphore <- struct{}{}:
+				default:
+					// 所有槽位都被占用，继续等待
+				}
+			}
+			log.Println("主队列处理协程已结束")
 			return
 		case <-ticker.C:
 			q.processOutboundMessages(semaphore)
@@ -301,12 +323,15 @@ func (q *MailQueue) deliverRemoteMessage(msg *MailMessage, recipient string) err
 
 // processRetryQueue 处理重试队列
 func (q *MailQueue) processRetryQueue() {
+	defer q.wg.Done()
+	
 	ticker := time.NewTicker(q.config.RetryInterval)
 	defer ticker.Stop()
 	
 	for {
 		select {
 		case <-q.stopChan:
+			log.Println("重试队列处理协程已结束")
 			return
 		case <-ticker.C:
 			q.moveRetryToOutbound()

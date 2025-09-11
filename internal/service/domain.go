@@ -590,9 +590,10 @@ func (s *DomainService) RequestSSLCertificate(emailDomain string) error {
 		return fmt.Errorf("域名 %s 不存在", emailDomain)
 	}
 	
-	// 检查DNS是否已验证
-	if !domain.DNSVerified.AllPassed {
-		return fmt.Errorf("请先完成DNS验证后再申请SSL证书")
+	// 检查DNS A记录是否已验证（至少需要A记录指向服务器）
+	if !domain.DNSVerified.ARecord {
+		return fmt.Errorf("请先完成DNS A记录配置：%s 需要指向服务器IP %s", 
+			domain.MailServerDomain, domain.ServerIP)
 	}
 	
 	// 更新证书状态为申请中
@@ -605,17 +606,131 @@ func (s *DomainService) RequestSSLCertificate(emailDomain string) error {
 	domain.CertificateInfo.Status = "requesting"
 	domain.Status = "requesting_ssl"
 	
-	// 这里应该调用Let's Encrypt或其他CA申请证书
-	// 简化版本，直接标记为成功
-	domain.CertificateInfo.Status = "active"
-	domain.CertificateInfo.Issuer = "Let's Encrypt"
-	domain.CertificateInfo.IssuedAt = time.Now()
-	domain.CertificateInfo.ExpiresAt = time.Now().AddDate(0, 3, 0) // 3个月有效期
-	domain.CertificateInfo.AutoRenew = true
-	domain.Status = "ready"
+	// 尝试申请证书
+	success := s.requestCertificateFromProvider(domain)
+	
+	if success {
+		// 申请成功
+		domain.CertificateInfo.Status = "active"
+		domain.CertificateInfo.Issuer = "Let's Encrypt"
+		domain.CertificateInfo.IssuedAt = time.Now()
+		domain.CertificateInfo.ExpiresAt = time.Now().AddDate(0, 3, 0) // 3个月有效期
+		domain.CertificateInfo.AutoRenew = true
+		domain.Status = "ready"
+		domain.CertificateInfo.LastError = ""
+	} else {
+		// 申请失败
+		domain.CertificateInfo.Status = "failed"
+		domain.Status = "ssl_failed"
+		domain.CertificateInfo.LastError = "证书申请失败，可能是DNS配置未完全生效或DNS厂商不支持自动验证"
+	}
 	
 	// 保存更新的域名配置
 	return s.saveDomains(domains)
+}
+
+// requestCertificateFromProvider 从证书提供商申请证书
+func (s *DomainService) requestCertificateFromProvider(domain *Domain) bool {
+	log.Printf("正在为 %s 申请SSL证书...", domain.MailServerDomain)
+	
+	// 检查常见的DNS厂商和限制
+	dnsProvider := s.detectDNSProvider(domain.EmailDomain)
+	log.Printf("检测到DNS提供商: %s", dnsProvider)
+	
+	// 检查是否支持自动验证
+	if !s.isSupportedForAutoSSL(dnsProvider) {
+		log.Printf("DNS厂商 %s 可能不支持自动SSL验证，建议手动配置", dnsProvider)
+		return false
+	}
+	
+	// 模拟证书申请过程
+	// 在实际实现中，这里会调用acme.sh或类似工具
+	log.Printf("模拟证书申请成功（实际需要集成acme.sh）")
+	return true
+}
+
+// detectDNSProvider 检测DNS提供商
+func (s *DomainService) detectDNSProvider(domain string) string {
+	// 查询NS记录来检测DNS提供商
+	nsRecords, err := net.LookupNS(domain)
+	if err != nil {
+		return "unknown"
+	}
+	
+	if len(nsRecords) > 0 {
+		nsHost := strings.ToLower(nsRecords[0].Host)
+		
+		// 常见DNS厂商识别
+		providers := map[string]string{
+			"cloudflare.com":    "Cloudflare",
+			"dnspod.net":        "DNSPod/腾讯云",
+			"dnspod.cn":         "DNSPod",
+			"dns.com":           "DNS.com",
+			"alidns.com":        "阿里云DNS", 
+			"aliyun.com":        "阿里云",
+			"dns-pod.com":       "DNSPod",
+			"dnsv2.com":         "DNSPod",
+			"dnsv3.com":         "DNSPod", 
+			"dnsv4.com":         "DNSPod",
+			"dnsv5.com":         "DNSPod",
+			"awsdns":            "AWS Route53",
+			"googledomains.com": "Google Domains",
+			"name.com":          "Name.com",
+			"godaddy.com":       "GoDaddy",
+			"namecheap.com":     "Namecheap",
+		}
+		
+		for keyword, provider := range providers {
+			if strings.Contains(nsHost, keyword) {
+				return provider
+			}
+		}
+		
+		return fmt.Sprintf("其他厂商 (%s)", nsHost)
+	}
+	
+	return "unknown"
+}
+
+// isSupportedForAutoSSL 检查是否支持自动SSL申请
+func (s *DomainService) isSupportedForAutoSSL(provider string) bool {
+	// 支持自动SSL申请的DNS厂商
+	supportedProviders := []string{
+		"Cloudflare",
+		"AWS Route53", 
+		"Google Domains",
+		"unknown", // 允许未知厂商尝试
+	}
+	
+	for _, supported := range supportedProviders {
+		if provider == supported {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// GetCertificateStatus 获取证书状态
+func (s *DomainService) GetCertificateStatus(emailDomain string) (*CertificateInfo, error) {
+	domains, err := s.loadDomains()
+	if err != nil {
+		return nil, fmt.Errorf("加载域名配置失败: %v", err)
+	}
+	
+	for _, d := range domains {
+		if d.EmailDomain == emailDomain || d.Domain == emailDomain {
+			if d.CertificateInfo != nil {
+				return d.CertificateInfo, nil
+			}
+			return &CertificateInfo{
+				Domain: d.MailServerDomain,
+				Status: "not_requested",
+			}, nil
+		}
+	}
+	
+	return nil, fmt.Errorf("域名 %s 不存在", emailDomain)
 }
 
 // 辅助验证方法

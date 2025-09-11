@@ -47,6 +47,17 @@ deploy_local() {
         exit 1
     fi
     
+    # 清空旧数据
+    echo "🗑️ 清空旧数据..."
+    if [ -f "scripts/reset_data.sh" ]; then
+        chmod +x scripts/reset_data.sh
+        bash scripts/reset_data.sh
+        echo "✅ 数据已清空"
+    else
+        echo "⚠️ 未找到数据重置脚本，手动清理数据目录..."
+        rm -rf data/*.json data/certs/ data/mail/ data/keys/
+    fi
+    
     # 检查并安装Go
     if ! command -v go &> /dev/null; then
         echo "📦 安装Go..."
@@ -150,6 +161,17 @@ fi
 echo "📥 克隆最新代码..."
 git clone https://github.com/arlenops/ESemail.git
 cd ESemail
+
+# 清空旧数据
+echo "🗑️ 清空旧数据..."
+if [ -f "scripts/reset_data.sh" ]; then
+    chmod +x scripts/reset_data.sh
+    bash scripts/reset_data.sh
+    echo "✅ 数据已清空"
+else
+    echo "⚠️ 未找到数据重置脚本，手动清理数据目录..."
+    rm -rf data/*.json data/certs/ data/mail/ data/keys/
+fi
 
 # 创建环境标识文件
 echo "ENVIRONMENT=production" > .env

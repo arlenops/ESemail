@@ -67,14 +67,31 @@ func (s *CertService) IssueCertificate(req IssueCertRequest) error {
 		return fmt.Errorf("域名验证失败: %v", err)
 	}
 
-	// 验证DNS提供商
+	// 验证DNS提供商 - 扩展支持更多厂商
 	allowedProviders := map[string]bool{
 		"cloudflare": true,
 		"aliyun":     true,
+		"dnspod":     true,
+		"cf":         true,  // Cloudflare简称
+		"ali":        true,  // 阿里云简称
+		"dp":         true,  // DNSPod简称
+		"aws":        true,  // AWS Route53
+		"gcp":        true,  // Google Cloud DNS
+		"azure":      true,  // Azure DNS
+		"godaddy":    true,  // GoDaddy
+		"namesilo":   true,  // Namesilo
 	}
 	
-	if !allowedProviders[req.DNSProvider] {
-		return fmt.Errorf("不支持的DNS提供商: %s", req.DNSProvider)
+	if req.DNSProvider == "" {
+		return fmt.Errorf("请选择DNS提供商")
+	}
+	
+	if !allowedProviders[strings.ToLower(req.DNSProvider)] {
+		supportedList := make([]string, 0, len(allowedProviders))
+		for provider := range allowedProviders {
+			supportedList = append(supportedList, provider)
+		}
+		return fmt.Errorf("不支持的DNS提供商: %s，支持的提供商: %v", req.DNSProvider, supportedList)
 	}
 
 	// 验证API凭据（基本检查）
@@ -163,16 +180,29 @@ func (s *CertService) parseCertificateOutput(cert *Certificate, output string) {
 }
 
 func (s *CertService) setupDNSProvider(provider, apiKey, apiSecret string) error {
-	switch provider {
-	case "cf":
+	switch strings.ToLower(provider) {
+	case "cf", "cloudflare":
 		os.Setenv("CF_Key", apiKey)
 		os.Setenv("CF_Email", apiSecret)
-	case "ali":
+	case "ali", "aliyun":
 		os.Setenv("Ali_Key", apiKey)
 		os.Setenv("Ali_Secret", apiSecret)
-	case "dp":
+	case "dp", "dnspod":
 		os.Setenv("DP_Id", apiKey)
 		os.Setenv("DP_Key", apiSecret)
+	case "aws":
+		os.Setenv("AWS_ACCESS_KEY_ID", apiKey)
+		os.Setenv("AWS_SECRET_ACCESS_KEY", apiSecret)
+	case "gcp":
+		os.Setenv("GCE_SERVICE_ACCOUNT_FILE", apiKey)
+	case "azure":
+		os.Setenv("AZUREDNS_SUBSCRIPTIONID", apiKey)
+		os.Setenv("AZUREDNS_CLIENTSECRET", apiSecret)
+	case "godaddy":
+		os.Setenv("GD_Key", apiKey)
+		os.Setenv("GD_Secret", apiSecret)
+	case "namesilo":
+		os.Setenv("Namesilo_Key", apiKey)
 	default:
 		return fmt.Errorf("不支持的DNS提供商: %s", provider)
 	}
