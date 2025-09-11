@@ -598,12 +598,20 @@ async function addUser(e) {
     
     data.quota = parseInt(data.quota) * 1024 * 1024;
     
+    // 禁用提交按钮防止重复提交
+    const submitButton = e.target.querySelector('button[type="submit"]');
+    const originalText = submitButton.textContent;
+    submitButton.disabled = true;
+    submitButton.textContent = '创建中...';
+    
     try {
         const response = await fetch('/api/v1/users', {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify(data)
         });
+        
+        const result = await response.json();
         
         if (response.ok) {
             alert('用户创建成功');
@@ -615,11 +623,16 @@ async function addUser(e) {
             // 同时刷新邮件发送页面的邮箱选项
             loadUserEmailOptions();
         } else {
-            const error = await response.json();
-            alert('创建失败: ' + error.error);
+            // 显示服务器返回的错误信息
+            alert('创建失败: ' + (result.error || '未知错误'));
         }
     } catch (error) {
-        alert('创建失败: ' + error.message);
+        console.error('创建用户请求失败:', error);
+        alert('创建失败: 网络错误或服务器无响应');
+    } finally {
+        // 恢复提交按钮状态
+        submitButton.disabled = false;
+        submitButton.textContent = originalText;
     }
 }
 

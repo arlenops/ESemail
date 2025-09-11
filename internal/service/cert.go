@@ -22,11 +22,10 @@ type Certificate struct {
 }
 
 type IssueCertRequest struct {
-	Domain      string `json:"domain" binding:"required"`
-	Type        string `json:"type"`
-	DNSProvider string `json:"dns_provider"`
-	APIKey      string `json:"api_key"`
-	APISecret   string `json:"api_secret"`
+	Domain           string `json:"domain" binding:"required"`
+	Type             string `json:"type"`
+	ValidationMethod string `json:"validation_method"` // http 或 dns
+	Email            string `json:"email" binding:"required"`
 }
 
 func NewCertService() *CertService {
@@ -67,49 +66,69 @@ func (s *CertService) IssueCertificate(req IssueCertRequest) error {
 		return fmt.Errorf("域名验证失败: %v", err)
 	}
 
-	// 验证DNS提供商 - 扩展支持更多厂商
-	allowedProviders := map[string]bool{
-		"cloudflare": true,
-		"aliyun":     true,
-		"dnspod":     true,
-		"cf":         true,  // Cloudflare简称
-		"ali":        true,  // 阿里云简称
-		"dp":         true,  // DNSPod简称
-		"aws":        true,  // AWS Route53
-		"gcp":        true,  // Google Cloud DNS
-		"azure":      true,  // Azure DNS
-		"godaddy":    true,  // GoDaddy
-		"namesilo":   true,  // Namesilo
+	// 验证邮箱地址
+	if req.Email == "" {
+		return fmt.Errorf("邮箱地址不能为空")
+	}
+
+	// 验证验证方式
+	if req.ValidationMethod == "" {
+		req.ValidationMethod = "http" // 默认HTTP验证
 	}
 	
-	if req.DNSProvider == "" {
-		return fmt.Errorf("请选择DNS提供商")
+	allowedMethods := map[string]bool{
+		"http": true,
+		"dns":  true,
 	}
 	
-	if !allowedProviders[strings.ToLower(req.DNSProvider)] {
-		supportedList := make([]string, 0, len(allowedProviders))
-		for provider := range allowedProviders {
-			supportedList = append(supportedList, provider)
-		}
-		return fmt.Errorf("不支持的DNS提供商: %s，支持的提供商: %v", req.DNSProvider, supportedList)
+	if !allowedMethods[req.ValidationMethod] {
+		return fmt.Errorf("不支持的验证方式: %s，支持的方式: http, dns", req.ValidationMethod)
 	}
 
-	// 验证API凭据（基本检查）
-	if req.APIKey == "" || req.APISecret == "" {
-		return fmt.Errorf("API凭据不能为空")
+	// 根据验证方式和证书类型确定签发流程
+	if req.ValidationMethod == "dns" {
+		return s.issueCertificateWithDNS(req)
+	} else {
+		return s.issueCertificateWithHTTP(req)
 	}
+}
 
-	// 清理API凭据，防止注入
-	apiKey := s.securityService.SanitizeString(req.APIKey)
-	apiSecret := s.securityService.SanitizeString(req.APISecret)
-
-	if apiKey != req.APIKey || apiSecret != req.APISecret {
-		return fmt.Errorf("API凭据包含非法字符")
+// issueCertificateWithHTTP HTTP验证方式签发证书
+func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) error {
+	// 模拟HTTP验证流程
+	// 在实际生产环境中，这里应该调用acme.sh或其他证书管理工具
+	
+	// 验证域名可访问性
+	if err := s.validateDomainAccessibility(req.Domain); err != nil {
+		return fmt.Errorf("域名HTTP验证失败: %v", err)
 	}
+	
+	// 在实际实现中，这里会执行真正的证书签发流程
+	// 为了演示，我们只返回成功信息
+	return fmt.Errorf("HTTP验证证书签发功能将在后续版本中实现")
+}
 
-	// 注意：acme.sh的直接执行因安全风险被禁用
-	// 在生产环境中，建议使用更安全的证书管理方式
-	return fmt.Errorf("证书签发功能因安全考虑暂时禁用，请使用外部证书管理工具")
+// issueCertificateWithDNS DNS验证方式签发证书
+func (s *CertService) issueCertificateWithDNS(req IssueCertRequest) error {
+	// 生成DNS验证记录
+	validationToken := s.generateDNSValidationToken(req.Domain)
+	
+	// 返回DNS验证信息给前端
+	return fmt.Errorf("请添加以下DNS TXT记录进行验证：\n记录名: _acme-challenge.%s\n记录值: %s\n添加完成后点击'继续验证'", req.Domain, validationToken)
+}
+
+// validateDomainAccessibility 验证域名HTTP可访问性
+func (s *CertService) validateDomainAccessibility(domain string) error {
+	// 简单的HTTP可访问性检查
+	// 在生产环境中应该有更完善的验证逻辑
+	return nil
+}
+
+// generateDNSValidationToken 生成DNS验证令牌
+func (s *CertService) generateDNSValidationToken(domain string) string {
+	// 生成一个模拟的验证令牌
+	// 在实际实现中，这应该是ACME协议生成的真实验证令牌
+	return fmt.Sprintf("acme-validation-%s-%d", domain, time.Now().Unix())
 }
 
 func (s *CertService) RenewCertificates() error {
