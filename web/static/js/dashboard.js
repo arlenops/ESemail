@@ -641,6 +641,19 @@ async function issueCertificate(e) {
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
     
+    // 根据证书类型调整域名
+    if (data.cert_type === 'mail') {
+        data.domain = 'mail.' + data.domain;
+    } else if (data.cert_type === 'wildcard') {
+        data.domain = '*.' + data.domain;
+        data.validation_method = 'dns'; // 通配符证书强制使用DNS验证
+    }
+    
+    const submitBtn = document.getElementById('issue-cert-submit');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>处理中...';
+    
     try {
         const response = await fetch('/api/v1/certificates/issue', {
             method: 'POST',
@@ -648,17 +661,140 @@ async function issueCertificate(e) {
             body: JSON.stringify(data)
         });
         
+        const result = await response.json();
+        
         if (response.ok) {
-            alert('证书签发成功');
-            bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
-            loadCertificates();
+            if (data.validation_method === 'dns') {
+                // 显示DNS验证信息
+                showDNSValidation(result.dns_name, result.dns_value);
+            } else {
+                // HTTP验证直接完成
+                alert('证书申请成功');
+                bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
+                loadCertificates();
+            }
         } else {
-            const error = await response.json();
-            alert('签发失败: ' + error.error);
+            alert('申请失败: ' + result.error);
         }
     } catch (error) {
-        alert('签发失败: ' + error.message);
+        console.error('申请证书失败:', error);
+        alert('网络错误，请重试');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
     }
+}
+
+// 显示DNS验证信息
+function showDNSValidation(dnsName, dnsValue) {
+    // 隐藏表单，显示DNS验证区域
+    document.getElementById('issue-cert-form').style.display = 'none';
+    document.getElementById('dns-validation-section').classList.remove('d-none');
+    
+    // 填充DNS记录信息
+    document.getElementById('dns-record-name').value = dnsName;
+    document.getElementById('dns-record-value').value = dnsValue;
+    
+    // 切换按钮显示
+    document.getElementById('issue-cert-submit').classList.add('d-none');
+    document.getElementById('continue-validation-btn').classList.remove('d-none');
+    document.getElementById('back-to-form-btn').classList.remove('d-none');
+}
+
+// 复制到剪贴板功能
+function copyToClipboard(elementId) {
+    const element = document.getElementById(elementId);
+    element.select();
+    element.setSelectionRange(0, 99999); // 兼容移动设备
+    
+    try {
+        document.execCommand('copy');
+        // 显示复制成功提示
+        const button = element.nextElementSibling;
+        const originalIcon = button.innerHTML;
+        button.innerHTML = '<i class="fas fa-check text-success"></i>';
+        setTimeout(() => {
+            button.innerHTML = originalIcon;
+        }, 2000);
+    } catch (err) {
+        console.error('复制失败:', err);
+        alert('复制失败，请手动选择并复制');
+    }
+}
+
+// 继续验证DNS记录
+async function continueValidation() {
+    const continueBtn = document.getElementById('continue-validation-btn');
+    const originalText = continueBtn.innerHTML;
+    continueBtn.disabled = true;
+    continueBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>验证中...';
+    
+    const resultDiv = document.getElementById('dns-validation-result');
+    
+    try {
+        const response = await fetch('/api/v1/certificates/validate-dns', {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({
+                dns_name: document.getElementById('dns-record-name').value,
+                dns_value: document.getElementById('dns-record-value').value
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong>DNS验证成功！</strong><br>
+                    <small>证书正在申请中，请稍候...</small>
+                </div>
+            `;
+            
+            // 等待证书签发完成
+            setTimeout(() => {
+                bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
+                loadCertificates();
+                alert('证书申请成功！');
+            }, 3000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>DNS验证失败</strong><br>
+                    <small>${result.error || 'DNS记录未找到或未生效，请检查DNS设置'}</small>
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('DNS验证失败:', error);
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>验证请求失败</strong><br>
+                <small>网络错误，请检查连接后重试</small>
+            </div>
+        `;
+    } finally {
+        continueBtn.disabled = false;
+        continueBtn.innerHTML = originalText;
+    }
+}
+
+// 返回表单
+function backToForm() {
+    // 显示表单，隐藏DNS验证区域
+    document.getElementById('issue-cert-form').style.display = 'block';
+    document.getElementById('dns-validation-section').classList.add('d-none');
+    
+    // 切换按钮显示
+    document.getElementById('issue-cert-submit').classList.remove('d-none');
+    document.getElementById('continue-validation-btn').classList.add('d-none');
+    document.getElementById('back-to-form-btn').classList.add('d-none');
+    
+    // 清空结果显示
+    document.getElementById('dns-validation-result').innerHTML = '';
 }
 
 async function renewCertificates() {

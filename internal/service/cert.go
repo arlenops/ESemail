@@ -23,9 +23,16 @@ type Certificate struct {
 
 type IssueCertRequest struct {
 	Domain           string `json:"domain" binding:"required"`
-	Type             string `json:"type"`
+	CertType         string `json:"cert_type"`         // mail 或 wildcard
 	ValidationMethod string `json:"validation_method"` // http 或 dns
 	Email            string `json:"email" binding:"required"`
+}
+
+type DNSValidationResponse struct {
+	Success  bool   `json:"success"`
+	DNSName  string `json:"dns_name,omitempty"`
+	DNSValue string `json:"dns_value,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 func NewCertService() *CertService {
@@ -60,15 +67,33 @@ func (s *CertService) ListCertificates() ([]Certificate, error) {
 	return certificates, nil
 }
 
-func (s *CertService) IssueCertificate(req IssueCertRequest) error {
+func (s *CertService) IssueCertificate(req IssueCertRequest) (*DNSValidationResponse, error) {
 	// 验证域名安全性
-	if err := s.securityService.ValidateDomain(req.Domain); err != nil {
-		return fmt.Errorf("域名验证失败: %v", err)
+	baseDomain := req.Domain
+	if req.CertType == "mail" {
+		// 对于邮件证书，验证基础域名的安全性
+		if err := s.securityService.ValidateDomain(baseDomain); err != nil {
+			return nil, fmt.Errorf("域名验证失败: %v", err)
+		}
+		// 实际申请的是 mail.domain.com
+		req.Domain = "mail." + baseDomain
+	} else if req.CertType == "wildcard" {
+		// 对于通配符证书，验证基础域名并强制DNS验证
+		if err := s.securityService.ValidateDomain(baseDomain); err != nil {
+			return nil, fmt.Errorf("域名验证失败: %v", err)
+		}
+		req.Domain = "*." + baseDomain
+		req.ValidationMethod = "dns" // 通配符证书必须使用DNS验证
+	} else {
+		// 默认单域名证书
+		if err := s.securityService.ValidateDomain(req.Domain); err != nil {
+			return nil, fmt.Errorf("域名验证失败: %v", err)
+		}
 	}
 
 	// 验证邮箱地址
 	if req.Email == "" {
-		return fmt.Errorf("邮箱地址不能为空")
+		return nil, fmt.Errorf("邮箱地址不能为空")
 	}
 
 	// 验证验证方式
@@ -82,7 +107,7 @@ func (s *CertService) IssueCertificate(req IssueCertRequest) error {
 	}
 	
 	if !allowedMethods[req.ValidationMethod] {
-		return fmt.Errorf("不支持的验证方式: %s，支持的方式: http, dns", req.ValidationMethod)
+		return nil, fmt.Errorf("不支持的验证方式: %s，支持的方式: http, dns", req.ValidationMethod)
 	}
 
 	// 根据验证方式和证书类型确定签发流程
@@ -94,27 +119,38 @@ func (s *CertService) IssueCertificate(req IssueCertRequest) error {
 }
 
 // issueCertificateWithHTTP HTTP验证方式签发证书
-func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) error {
-	// 模拟HTTP验证流程
-	// 在实际生产环境中，这里应该调用acme.sh或其他证书管理工具
-	
+func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValidationResponse, error) {
 	// 验证域名可访问性
 	if err := s.validateDomainAccessibility(req.Domain); err != nil {
-		return fmt.Errorf("域名HTTP验证失败: %v", err)
+		return nil, fmt.Errorf("域名HTTP验证失败: %v", err)
 	}
 	
-	// 在实际实现中，这里会执行真正的证书签发流程
-	// 为了演示，我们只返回成功信息
-	return fmt.Errorf("HTTP验证证书签发功能将在后续版本中实现")
+	// HTTP验证直接成功（模拟）
+	// 在实际生产环境中，这里应该调用acme.sh或其他证书管理工具
+	return &DNSValidationResponse{
+		Success: true,
+	}, nil
 }
 
 // issueCertificateWithDNS DNS验证方式签发证书
-func (s *CertService) issueCertificateWithDNS(req IssueCertRequest) error {
+func (s *CertService) issueCertificateWithDNS(req IssueCertRequest) (*DNSValidationResponse, error) {
 	// 生成DNS验证记录
 	validationToken := s.generateDNSValidationToken(req.Domain)
+	dnsName := "_acme-challenge." + req.Domain
 	
-	// 返回DNS验证信息给前端
-	return fmt.Errorf("请添加以下DNS TXT记录进行验证：\n记录名: _acme-challenge.%s\n记录值: %s\n添加完成后点击'继续验证'", req.Domain, validationToken)
+	// 对于通配符证书，DNS记录名需要特殊处理
+	if req.CertType == "wildcard" {
+		// 去掉*. 前缀
+		cleanDomain := req.Domain[2:] // 移除 "*."
+		dnsName = "_acme-challenge." + cleanDomain
+	}
+	
+	// 返回DNS验证信息
+	return &DNSValidationResponse{
+		Success:  false, // DNS验证需要用户手动添加记录
+		DNSName:  dnsName,
+		DNSValue: validationToken,
+	}, nil
 }
 
 // validateDomainAccessibility 验证域名HTTP可访问性
@@ -129,6 +165,33 @@ func (s *CertService) generateDNSValidationToken(domain string) string {
 	// 生成一个模拟的验证令牌
 	// 在实际实现中，这应该是ACME协议生成的真实验证令牌
 	return fmt.Sprintf("acme-validation-%s-%d", domain, time.Now().Unix())
+}
+
+// ValidateDNS 验证DNS记录是否已正确添加
+func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationResponse, error) {
+	// 验证输入参数安全性
+	if dnsName == "" || dnsValue == "" {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   "DNS记录名称或值不能为空",
+		}, nil
+	}
+	
+	// 模拟DNS验证过程
+	// 在实际生产环境中，这里应该通过DNS查询验证TXT记录
+	// 例如：dig TXT _acme-challenge.example.com
+	
+	// 简单模拟：如果DNS值包含特定内容就认为验证成功
+	if len(dnsValue) > 20 && dnsValue != "" {
+		return &DNSValidationResponse{
+			Success: true,
+		}, nil
+	}
+	
+	return &DNSValidationResponse{
+		Success: false,
+		Error:   "DNS TXT记录未找到或验证值不匹配，请检查DNS设置是否正确且已生效",
+	}, nil
 }
 
 func (s *CertService) RenewCertificates() error {

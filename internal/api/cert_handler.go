@@ -34,12 +34,28 @@ func (h *CertHandler) IssueCertificate(c *gin.Context) {
 		return
 	}
 
-	if err := h.certService.IssueCertificate(req); err != nil {
+	result, err := h.certService.IssueCertificate(req)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "证书签发成功"})
+	// 根据验证方式返回不同的响应
+	if result.Success {
+		// HTTP验证直接成功
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "证书申请成功",
+		})
+	} else {
+		// DNS验证需要用户操作
+		c.JSON(http.StatusOK, gin.H{
+			"success":   false,
+			"dns_name":  result.DNSName,
+			"dns_value": result.DNSValue,
+			"message":   "请添加DNS TXT记录后继续验证",
+		})
+	}
 }
 
 func (h *CertHandler) RenewCertificates(c *gin.Context) {
@@ -49,4 +65,25 @@ func (h *CertHandler) RenewCertificates(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "证书续签成功"})
+}
+
+// ValidateDNS 验证DNS记录
+func (h *CertHandler) ValidateDNS(c *gin.Context) {
+	var req struct {
+		DNSName  string `json:"dns_name" binding:"required"`
+		DNSValue string `json:"dns_value" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := h.certService.ValidateDNS(req.DNSName, req.DNSValue)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }

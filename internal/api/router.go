@@ -364,9 +364,11 @@ func SetupRouter(
 			// 证书管理
 			certs := authenticated.Group("/certificates")
 			{
-				certs.GET("", NewCertHandler(certService).ListCertificates)
-				certs.POST("/issue", NewCertHandler(certService).IssueCertificate)
-				certs.POST("/renew", NewCertHandler(certService).RenewCertificates)
+				certHandler := NewCertHandler(certService)
+				certs.GET("", certHandler.ListCertificates)
+				certs.POST("/issue", certHandler.IssueCertificate)
+				certs.POST("/validate-dns", certHandler.ValidateDNS)
+				certs.POST("/renew", certHandler.RenewCertificates)
 			}
 		}
 	}
