@@ -124,13 +124,27 @@ func (s *SecurityService) SanitizeString(input string) string {
 // ExecuteSecureCommand 安全地执行系统命令
 func (s *SecurityService) ExecuteSecureCommand(command string, args []string, timeout time.Duration) ([]byte, error) {
 	// 检查命令是否在白名单中
-	allowed, exists := s.allowedCommands[command]
+	// 对于路径命令，提取基本命令名进行检查
+	baseName := command
+	if strings.Contains(command, "/") {
+		parts := strings.Split(command, "/")
+		baseName = parts[len(parts)-1]
+	}
+	
+	allowed, exists := s.allowedCommands[baseName]
 	if !exists || !allowed {
-		return nil, fmt.Errorf("命令 '%s' 不被允许执行", command)
+		return nil, fmt.Errorf("命令 '%s' 不被允许执行", baseName)
+	}
+	
+	// 对于acme.sh，需要额外验证路径安全性
+	if baseName == "acme.sh" && strings.Contains(command, "/") {
+		if err := s.validateAcmeShPath(command); err != nil {
+			return nil, fmt.Errorf("acme.sh路径验证失败: %v", err)
+		}
 	}
 	
 	// 对acme.sh进行特殊安全验证
-	if command == "acme.sh" {
+	if baseName == "acme.sh" {
 		if err := s.validateAcmeCommand(args); err != nil {
 			return nil, fmt.Errorf("acme.sh参数验证失败: %v", err)
 		}
@@ -329,6 +343,25 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 	
 	log.Printf("INFO: 服务 %s 状态: %s", serviceName, status)
 	return status, nil
+}
+
+// validateAcmeShPath 验证acme.sh路径的安全性
+func (s *SecurityService) validateAcmeShPath(path string) error {
+	// 允许的acme.sh路径
+	allowedPaths := []string{
+		"/root/.acme.sh/acme.sh",     // 默认安装位置
+		"/home/acme/.acme.sh/acme.sh", // 用户安装位置
+		"/usr/local/bin/acme.sh",     // 系统安装位置
+		"/opt/acme.sh/acme.sh",       // 可选安装位置
+	}
+	
+	for _, allowedPath := range allowedPaths {
+		if path == allowedPath {
+			return nil
+		}
+	}
+	
+	return fmt.Errorf("不允许的acme.sh路径: %s", path)
 }
 
 // validateAcmeCommand 验证acme.sh命令参数的安全性
