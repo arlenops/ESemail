@@ -718,36 +718,22 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		email = s.config.Email
 	}
 	
-	// 如果仍然没有邮箱或邮箱无效，使用域名生成默认邮箱
+	// 如果仍然没有邮箱或邮箱无效，使用可靠的默认邮箱
 	if email == "" || !s.isValidEmailForAcme(email) {
-		// 从申请的域名生成管理员邮箱
-		domain := req.Domain
-		// 去掉可能的mail.前缀，使用基础域名
-		if strings.HasPrefix(domain, "mail.") {
-			domain = domain[5:] // 移除 "mail."
-		}
-		if strings.HasPrefix(domain, "*.") {
-			domain = domain[2:] // 移除 "*."
+		// 直接使用常见的公共邮箱域名，避免使用可能无效的申请域名
+		fallbackEmails := []string{
+			"admin@gmail.com",
+			"admin@outlook.com", 
+			"admin@yahoo.com",
+			"admin@hotmail.com",
 		}
 		
-		// 生成admin@基础域名格式的邮箱
-		generatedEmail := fmt.Sprintf("admin@%s", domain)
-		
-		// 验证生成的邮箱是否有效
-		if s.isValidEmailForAcme(generatedEmail) {
-			email = generatedEmail
-		} else {
-			// 如果当前域名无效，尝试使用一些常见的公共邮箱域名
-			fallbackDomains := []string{"gmail.com", "outlook.com", "yahoo.com", "hotmail.com"}
-			email = "admin@gmail.com"  // 默认使用gmail
-			
-			// 尝试找一个可用的公共域名
-			for _, fbDomain := range fallbackDomains {
-				testEmail := fmt.Sprintf("admin@%s", fbDomain)
-				if s.isValidEmailForAcme(testEmail) {
-					email = testEmail
-					break
-				}
+		// 使用第一个有效的公共邮箱
+		email = fallbackEmails[0] // 默认使用gmail
+		for _, fallbackEmail := range fallbackEmails {
+			if s.isValidEmailForAcme(fallbackEmail) {
+				email = fallbackEmail
+				break
 			}
 		}
 	}
@@ -916,9 +902,35 @@ func (s *CertService) isValidEmailForAcme(email string) bool {
 		return false
 	}
 	
-	domain := parts[1]
+	domain := strings.ToLower(parts[1])
 	
-	// 检查域名是否有有效的TLD
+	// 直接检查已知的有效公共邮箱域名
+	validDomains := []string{
+		"gmail.com",
+		"outlook.com", 
+		"yahoo.com",
+		"hotmail.com",
+		"qq.com",
+		"163.com",
+		"126.com",
+		"sina.com",
+		"sohu.com",
+		"live.com",
+		"msn.com",
+		"aol.com",
+		"icloud.com",
+		"protonmail.com",
+		"mail.com",
+		"zoho.com",
+	}
+	
+	// 如果是已知的有效域名，直接返回true
+	for _, validDomain := range validDomains {
+		if domain == validDomain {
+			return true
+		}
+	}
+	
 	// 排除一些已知的无效或测试域名
 	invalidDomains := []string{
 		"localhost",
@@ -926,10 +938,10 @@ func (s *CertService) isValidEmailForAcme(email string) bool {
 		"test.com",
 		"invalid",
 		"local",
-		".local",
-		".test",
-		".invalid",
-		".localhost",
+		"example.org",
+		"example.net",
+		"test.invalid",
+		"localhost.localdomain",
 	}
 	
 	for _, invalid := range invalidDomains {
@@ -943,13 +955,13 @@ func (s *CertService) isValidEmailForAcme(email string) bool {
 		return false
 	}
 	
-	parts = strings.Split(domain, ".")
-	if len(parts) < 2 {
+	domainParts := strings.Split(domain, ".")
+	if len(domainParts) < 2 {
 		return false
 	}
 	
 	// 最后一部分应该是TLD，长度应该在2-10之间
-	tld := parts[len(parts)-1]
+	tld := domainParts[len(domainParts)-1]
 	if len(tld) < 2 || len(tld) > 10 {
 		return false
 	}
