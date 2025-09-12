@@ -2,6 +2,7 @@ package api
 
 import (
 	"esemail/internal/service"
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -54,6 +55,13 @@ func (h *CertHandler) IssueCertificate(c *gin.Context) {
 			"dns_name":  result.DNSName,
 			"dns_value": result.DNSValue,
 			"message":   "请添加DNS TXT记录后继续验证",
+			"instructions": gin.H{
+				"record_type": "TXT",
+				"record_name": result.DNSName,
+				"record_value": result.DNSValue,
+				"example": fmt.Sprintf("添加 TXT 记录：\n名称: %s\n类型: TXT\n值: %s", result.DNSName, result.DNSValue),
+				"note": "某些DNS服务商可能只需要输入记录名称的前缀部分，请根据您的DNS服务商要求调整",
+			},
 		})
 	}
 }

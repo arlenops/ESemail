@@ -85,23 +85,32 @@ func (s *CertService) ListCertificates() ([]Certificate, error) {
 
 func (s *CertService) IssueCertificate(req IssueCertRequest) (*DNSValidationResponse, error) {
 	// 验证域名安全性
-	baseDomain := req.Domain
+	originalDomain := req.Domain
+	
 	if req.CertType == "mail" {
-		// 对于邮件证书，验证基础域名的安全性
-		if err := s.securityService.ValidateDomain(baseDomain); err != nil {
+		// 对于邮件证书，检查域名是否已经有mail.前缀
+		if !strings.HasPrefix(originalDomain, "mail.") {
+			// 如果没有mail.前缀，添加它
+			req.Domain = "mail." + originalDomain
+		}
+		// 验证最终域名的安全性
+		if err := s.securityService.ValidateDomain(req.Domain); err != nil {
 			return nil, fmt.Errorf("域名验证失败: %v", err)
 		}
-		// 实际申请的是 mail.domain.com
-		req.Domain = "mail." + baseDomain
 	} else if req.CertType == "wildcard" {
-		// 对于通配符证书，验证基础域名并强制DNS验证
+		// 对于通配符证书，检查域名是否已经有*.前缀
+		if !strings.HasPrefix(originalDomain, "*.") {
+			// 如果没有*.前缀，添加它
+			req.Domain = "*." + originalDomain
+		}
+		// 验证基础域名的安全性（去掉*. 前缀）
+		baseDomain := strings.TrimPrefix(req.Domain, "*.")
 		if err := s.securityService.ValidateDomain(baseDomain); err != nil {
 			return nil, fmt.Errorf("域名验证失败: %v", err)
 		}
-		req.Domain = "*." + baseDomain
 		req.ValidationMethod = "dns" // 通配符证书必须使用DNS验证
 	} else {
-		// 默认单域名证书
+		// 默认单域名证书，直接验证
 		if err := s.securityService.ValidateDomain(req.Domain); err != nil {
 			return nil, fmt.Errorf("域名验证失败: %v", err)
 		}
@@ -264,7 +273,7 @@ func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationRespo
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error:   fmt.Sprintf("DNS查询失败: %v", err),
+			Error:   fmt.Sprintf("DNS查询失败: %v。请确保dig命令可用", err),
 		}, nil
 	}
 	
@@ -273,15 +282,18 @@ func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationRespo
 	if outputStr == "" {
 		return &DNSValidationResponse{
 			Success: false,
-			Error:   "DNS TXT记录未找到，请检查DNS设置是否正确且已生效",
+			Error:   fmt.Sprintf("DNS TXT记录未找到。请添加记录：%s TXT %s", dnsName, dnsValue),
 		}, nil
 	}
 	
 	// 检查返回的值是否包含期望的验证值
 	// dig返回的TXT记录会被引号包围，需要去除
 	foundValues := strings.Split(outputStr, "\n")
+	var foundValuesList []string
+	
 	for _, value := range foundValues {
-		cleanValue := strings.Trim(value, "\"")
+		cleanValue := strings.Trim(value, "\" \t")
+		foundValuesList = append(foundValuesList, cleanValue)
 		if cleanValue == dnsValue {
 			// DNS验证成功，现在完成证书申请
 			return s.completeDNSChallenge(dnsName, dnsValue)
@@ -290,7 +302,8 @@ func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationRespo
 	
 	return &DNSValidationResponse{
 		Success: false,
-		Error:   "DNS TXT记录值不匹配，请确认已正确添加DNS记录",
+		Error: fmt.Sprintf("DNS TXT记录值不匹配。\n期望值: %s\n找到值: %s\n请检查DNS记录是否正确添加", 
+			dnsValue, strings.Join(foundValuesList, ", ")),
 	}, nil
 }
 
