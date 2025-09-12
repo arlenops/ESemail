@@ -358,6 +358,11 @@ func (s *SecurityService) validateAcmeCommand(args []string) error {
 		"--reloadcmd", "--postrun", "--renew-hook",
 		"--server", "--email", "--accountemail",
 		"--force", "--debug", "--log", "--syslog",
+		"--manual", "--standalone", "--alpn",
+		"--keylength", "--accountkeylength",
+		"--pre-hook", "--post-hook", "--renew-hook",
+		"--staging", "--test",
+		"--httpport", "--tlsport", "--local-address",
 	}
 	
 	// 检查第一个参数是否是允许的操作

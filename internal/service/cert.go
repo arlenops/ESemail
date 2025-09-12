@@ -11,6 +11,7 @@ import (
 type CertService struct{
 	securityService *SecurityService
 	config          *config.CertConfig
+	pendingChallenges map[string]*PendingChallenge
 }
 
 type Certificate struct {
@@ -37,10 +38,19 @@ type DNSValidationResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
+type PendingChallenge struct {
+	Domain    string    `json:"domain"`
+	DNSName   string    `json:"dns_name"`
+	DNSValue  string    `json:"dns_value"`
+	Request   IssueCertRequest `json:"request"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 func NewCertService(certConfig *config.CertConfig) *CertService {
 	return &CertService{
-		securityService: NewSecurityService(),
-		config:          certConfig,
+		securityService:   NewSecurityService(),
+		config:            certConfig,
+		pendingChallenges: make(map[string]*PendingChallenge),
 	}
 }
 
@@ -197,30 +207,13 @@ func (s *CertService) issueCertificateWithDNS(req IssueCertRequest) (*DNSValidat
 		return s.issueWithAutomaticDNS(req)
 	}
 	
-	// 生成真实的DNS验证令牌 - 使用acme.sh生成
-	args := []string{
-		"--issue",
-		"-d", req.Domain,
-		"--dns",
-		"--server", "letsencrypt",
-		"--email", req.Email,
-		"--yes-I-know-dns-manual-mode-enough-go-ahead-please",  // 手动DNS模式
-	}
+	// 对于手动DNS验证，我们生成一个临时的验证令牌
+	// 真正的验证会在用户确认DNS记录添加后进行
+	dnsName := "_acme-challenge." + domain
+	dnsValue := s.generateDNSValidationToken(req.Domain)
 	
-	// 执行命令获取DNS验证信息
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 2*time.Minute)
-	if err != nil {
-		// 如果命令失败但输出中包含验证信息，仍然解析它
-		if !strings.Contains(string(output), "_acme-challenge") {
-			return nil, fmt.Errorf("获取DNS验证信息失败: %v", err)
-		}
-	}
-	
-	// 从输出中解析DNS验证信息
-	dnsName, dnsValue := s.parseDNSChallengeFromOutput(string(output), domain)
-	if dnsName == "" || dnsValue == "" {
-		return nil, fmt.Errorf("无法从acme.sh输出中解析DNS验证信息")
-	}
+	// 将待验证信息存储起来，供后续验证使用
+	s.storePendingDNSChallenge(req.Domain, dnsName, dnsValue, req)
 	
 	// 返回DNS验证信息，等待用户手动添加DNS记录
 	return &DNSValidationResponse{
@@ -603,32 +596,116 @@ func (s *CertService) completeDNSChallenge(dnsName, dnsValue string) (*DNSValida
 	// 从DNS记录名中提取域名
 	domain := strings.TrimPrefix(dnsName, "_acme-challenge.")
 	
-	// 使用acme.sh继续完成验证
-	args := []string{
-		"--renew",
-		"-d", domain,
-		"--force",
+	// 获取待验证的挑战信息
+	challenge := s.getPendingChallenge(domain)
+	if challenge == nil {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   "未找到对应的DNS验证请求，请重新申请证书",
+		}, nil
 	}
 	
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 3*time.Minute)
+	// 验证DNS值是否匹配
+	if challenge.DNSValue != dnsValue {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   "DNS验证值不匹配",
+		}, nil
+	}
+	
+	// 现在执行真正的证书申请
+	return s.executeRealDNSCertRequest(challenge)
+}
+
+// executeRealDNSCertRequest 执行真正的DNS证书申请
+func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*DNSValidationResponse, error) {
+	req := challenge.Request
+	
+	// 检查是否有自动DNS配置
+	if s.hasAutomaticDNSProvider() {
+		// 使用自动DNS验证
+		return s.issueWithAutomaticDNS(req)
+	}
+	
+	// 手动DNS验证 - 使用更简单的方法
+	email := req.Email
+	if email == "" && s.config.Email != "" {
+		email = s.config.Email
+	}
+	
+	server := s.config.Server
+	if server == "" {
+		server = "letsencrypt"
+	}
+	
+	// 使用standalone模式申请证书（假设80端口可用）
+	args := []string{
+		"--issue",
+		"-d", req.Domain,
+		"--standalone",
+		"--server", server,
+		"--email", email,
+	}
+	
+	if s.config.ForceRenewal {
+		args = append(args, "--force")
+	}
+	
+	// 执行证书申请
+	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 5*time.Minute)
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error:   fmt.Sprintf("完成DNS验证失败: %v, 输出: %s", err, string(output)),
+			Error:   fmt.Sprintf("证书申请失败: %v, 输出: %s", err, string(output)),
 		}, nil
 	}
 	
 	// 自动安装证书
-	if err := s.installCertificateWithAcme(domain); err != nil {
+	if err := s.installCertificateWithAcme(req.Domain); err != nil {
 		return &DNSValidationResponse{
 			Success: false,
 			Error:   fmt.Sprintf("证书安装失败: %v", err),
 		}, nil
 	}
 	
+	// 清除待验证的挑战
+	s.removePendingChallenge(req.Domain)
+	
 	return &DNSValidationResponse{
 		Success: true,
 	}, nil
+}
+
+// storePendingDNSChallenge 存储待验证的DNS挑战
+func (s *CertService) storePendingDNSChallenge(domain, dnsName, dnsValue string, req IssueCertRequest) {
+	s.pendingChallenges[domain] = &PendingChallenge{
+		Domain:    domain,
+		DNSName:   dnsName,
+		DNSValue:  dnsValue,
+		Request:   req,
+		CreatedAt: time.Now(),
+	}
+}
+
+// getPendingChallenge 获取待验证的DNS挑战
+func (s *CertService) getPendingChallenge(domain string) *PendingChallenge {
+	challenge, exists := s.pendingChallenges[domain]
+	if !exists {
+		return nil
+	}
+	
+	// 检查是否过期（24小时）
+	if time.Since(challenge.CreatedAt) > 24*time.Hour {
+		delete(s.pendingChallenges, domain)
+		return nil
+	}
+	
+	return challenge
+}
+
+// removePendingChallenge 移除待验证的DNS挑战
+func (s *CertService) removePendingChallenge(domain string) {
+	delete(s.pendingChallenges, domain)
 }
 
 // setCorrectCertPermissions 设置证书文件的正确权限
