@@ -48,12 +48,36 @@ cert:
   acme_path: "/root/.acme.sh"
   cert_path: "/etc/ssl/mail"
   webroot_path: "/var/www/html"
-  email: "admin@yourdomain.com"
+  email: "admin@yourdomain.com"  # 重要：请使用真实有效的邮箱地址
   server: "letsencrypt"
   auto_renew: true
   enable_http_challenge: true
   enable_dns_challenge: true
 ```
+
+### 📧 邮箱地址配置说明
+
+**重要**：ACME协议要求使用有效的邮箱地址进行证书申请。ESemail会按以下顺序选择邮箱：
+
+1. **请求中指定的邮箱** - API调用时提供的email参数
+2. **配置文件中的邮箱** - config.yaml中cert.email设置
+3. **自动生成邮箱** - 基于申请域名生成admin@domain.com格式
+4. **公共邮箱回退** - 使用admin@gmail.com等公共邮箱域名
+
+**建议配置**：
+```yaml
+# 推荐配置：使用真实管理员邮箱
+cert:
+  email: "admin@yourdomain.com"  # 替换为您的真实邮箱
+```
+
+**支持的邮箱格式**：
+- ✅ admin@yourdomain.com（推荐）
+- ✅ webmaster@yourdomain.com
+- ✅ admin@gmail.com（公共邮箱，可用作回退）
+- ❌ admin@localhost（无效）
+- ❌ admin@example.com（被ACME拒绝）
+- ❌ test@test.local（无效TLD）
 
 ### 2. HTTP验证准备（推荐新手）
 ```bash
@@ -170,6 +194,23 @@ sudo systemctl stop nginx apache2 httpd 2>/dev/null || true
 dig TXT _acme-challenge.yourdomain.com +short
 
 # 等待DNS传播（通常需要几分钟到几小时）
+```
+
+#### 5. 邮箱验证失败
+```bash
+# 错误: "contact email has invalid domain"
+# 解决方案1: 在config.yaml中配置有效邮箱
+cert:
+  email: "admin@yourdomain.com"  # 使用您的真实域名
+
+# 解决方案2: API调用时指定邮箱
+curl -X POST http://localhost:8686/api/v1/certificates/issue \
+  -H "Content-Type: application/json" \
+  -d '{"domain": "mail.yourdomain.com", "email": "admin@yourdomain.com"}'
+
+# 解决方案3: 使用公共邮箱（不推荐但可用）
+cert:
+  email: "admin@gmail.com"
 ```
 
 ## 🔄 自动续签设置

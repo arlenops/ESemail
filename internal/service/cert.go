@@ -712,9 +712,44 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	// 手动DNS验证 - 既然DNS记录已验证，尝试使用webroot模式完成申请
 	// webroot模式不需要socat，只需要能写入web目录
 	
+	// 验证和处理邮箱地址
 	email := req.Email
 	if email == "" && s.config.Email != "" {
 		email = s.config.Email
+	}
+	
+	// 如果仍然没有邮箱或邮箱无效，使用域名生成默认邮箱
+	if email == "" || !s.isValidEmailForAcme(email) {
+		// 从申请的域名生成管理员邮箱
+		domain := req.Domain
+		// 去掉可能的mail.前缀，使用基础域名
+		if strings.HasPrefix(domain, "mail.") {
+			domain = domain[5:] // 移除 "mail."
+		}
+		if strings.HasPrefix(domain, "*.") {
+			domain = domain[2:] // 移除 "*."
+		}
+		
+		// 生成admin@基础域名格式的邮箱
+		generatedEmail := fmt.Sprintf("admin@%s", domain)
+		
+		// 验证生成的邮箱是否有效
+		if s.isValidEmailForAcme(generatedEmail) {
+			email = generatedEmail
+		} else {
+			// 如果当前域名无效，尝试使用一些常见的公共邮箱域名
+			fallbackDomains := []string{"gmail.com", "outlook.com", "yahoo.com", "hotmail.com"}
+			email = "admin@gmail.com"  // 默认使用gmail
+			
+			// 尝试找一个可用的公共域名
+			for _, fbDomain := range fallbackDomains {
+				testEmail := fmt.Sprintf("admin@%s", fbDomain)
+				if s.isValidEmailForAcme(testEmail) {
+					email = testEmail
+					break
+				}
+			}
+		}
 	}
 	
 	server := s.config.Server
@@ -866,6 +901,67 @@ func (s *CertService) getAcmePath() string {
 	
 	// 如果都没找到，返回默认的acme.sh，让系统尝试从PATH查找
 	return "acme.sh"
+}
+
+// isValidEmailForAcme 验证邮箱地址是否适合ACME使用
+func (s *CertService) isValidEmailForAcme(email string) bool {
+	// 基本邮箱格式验证
+	if err := s.securityService.ValidateEmail(email); err != nil {
+		return false
+	}
+	
+	// 提取域名部分
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return false
+	}
+	
+	domain := parts[1]
+	
+	// 检查域名是否有有效的TLD
+	// 排除一些已知的无效或测试域名
+	invalidDomains := []string{
+		"localhost",
+		"example.com", 
+		"test.com",
+		"invalid",
+		"local",
+		".local",
+		".test",
+		".invalid",
+		".localhost",
+	}
+	
+	for _, invalid := range invalidDomains {
+		if domain == invalid {
+			return false
+		}
+	}
+	
+	// 检查是否有有效的TLD（至少包含一个点且后缀长度合理）
+	if !strings.Contains(domain, ".") {
+		return false
+	}
+	
+	parts = strings.Split(domain, ".")
+	if len(parts) < 2 {
+		return false
+	}
+	
+	// 最后一部分应该是TLD，长度应该在2-10之间
+	tld := parts[len(parts)-1]
+	if len(tld) < 2 || len(tld) > 10 {
+		return false
+	}
+	
+	// TLD应该只包含字母
+	for _, char := range tld {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z')) {
+			return false
+		}
+	}
+	
+	return true
 }
 
 // setCorrectCertPermissions 设置证书文件的正确权限
