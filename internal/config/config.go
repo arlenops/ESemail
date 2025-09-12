@@ -74,10 +74,18 @@ type MailConfig struct {
 }
 
 type CertConfig struct {
-	AcmePath  string `yaml:"acme_path" json:"acme_path"`
-	CertPath  string `yaml:"cert_path" json:"cert_path"`
-	DNSConfig string `yaml:"dns_config" json:"dns_config"`
-	AutoRenew bool   `yaml:"auto_renew" json:"auto_renew"`
+	AcmePath         string `yaml:"acme_path" json:"acme_path" env:"ACME_PATH" default:"/root/.acme.sh"`
+	CertPath         string `yaml:"cert_path" json:"cert_path" env:"CERT_PATH" default:"/etc/ssl/mail"`
+	WebrootPath      string `yaml:"webroot_path" json:"webroot_path" env:"WEBROOT_PATH" default:"/var/www/html"`
+	DNSProvider      string `yaml:"dns_provider" json:"dns_provider" env:"DNS_PROVIDER"`
+	AutoRenew        bool   `yaml:"auto_renew" json:"auto_renew" env:"CERT_AUTO_RENEW" default:"true"`
+	RenewDays        int    `yaml:"renew_days" json:"renew_days" default:"30"`
+	Server           string `yaml:"server" json:"server" env:"ACME_SERVER" default:"letsencrypt"`
+	Email            string `yaml:"email" json:"email" env:"ACME_EMAIL"`
+	KeySize          int    `yaml:"key_size" json:"key_size" default:"2048"`
+	EnableHTTPChallenge bool `yaml:"enable_http_challenge" json:"enable_http_challenge" default:"true"`
+	EnableDNSChallenge  bool `yaml:"enable_dns_challenge" json:"enable_dns_challenge" default:"true"`
+	ForceRenewal     bool   `yaml:"force_renewal" json:"force_renewal" default:"false"`
 }
 
 // SecurityConfig 安全配置

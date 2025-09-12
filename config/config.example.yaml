@@ -1,0 +1,68 @@
+# ESemail 邮件服务器配置文件示例
+# 复制此文件为 config.yaml 并根据需要修改
+
+server:
+  port: "8686"
+  host: "0.0.0.0"
+  mode: "release"
+  read_timeout: "30s"
+  write_timeout: "30s"
+  shutdown_timeout: "10s"
+
+database:
+  type: "json"
+  path: "./data"
+
+mail:
+  domain: "example.com"
+  data_path: "./mail"
+  log_path: "./logs"
+  admin_email: "admin@example.com"
+  smtp_port: "2525"    # 非特权端口
+  smtps_port: "4465"   # 非特权端口
+  imap_port: "1143"    # 非特权端口
+  imaps_port: "9993"   # 非特权端口
+  enable_tls: true
+  tls_cert_file: "/etc/ssl/mail/example.com/fullchain.pem"
+  tls_key_file: "/etc/ssl/mail/example.com/private.key"
+  max_message_size: 26214400  # 25MB
+  max_recipients: 100
+  queue_retries: 3
+  queue_interval: "30s"
+  retry_interval: "5m"
+  max_concurrent: 10
+
+cert:
+  acme_path: "/root/.acme.sh"
+  cert_path: "/etc/ssl/mail"
+  webroot_path: "/var/www/html"
+  dns_provider: ""  # 可选: cf, ali, dp, aws, gd, namesilo 等
+  auto_renew: true
+  renew_days: 30
+  server: "letsencrypt"
+  email: "admin@example.com"
+  key_size: 2048
+  enable_http_challenge: true
+  enable_dns_challenge: true
+  force_renewal: false
+
+security:
+  jwt_secret: ""  # 请设置一个强密码
+  jwt_expiration: "24h"
+  csrf_secret: ""  # 请设置一个强密码
+  rate_limit_enabled: true
+  rate_limit_rps: 100
+  rate_limit_burst: 200
+  allowed_origins: ["*"]
+  trusted_proxies: []
+
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+
+storage:
+  data_dir: "./data"
+  backup_dir: "./backups"
+  max_file_size: 104857600  # 100MB
+  cleanup_days: 30

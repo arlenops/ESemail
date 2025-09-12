@@ -340,7 +340,7 @@ func (ws *WorkflowService) validateSSLCertificate() error {
 	// 检查是否有有效证书
 	hasValidCert := false
 	for _, cert := range certs {
-		if cert.Status == "active" && time.Now().Before(cert.ExpiresAt) {
+		if cert.Status == "valid" && time.Now().Before(cert.ExpiresAt) {
 			hasValidCert = true
 			break
 		}

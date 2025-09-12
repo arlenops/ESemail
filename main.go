@@ -31,7 +31,7 @@ func main() {
 	systemService := service.NewSystemService()
 	domainService := service.NewDomainServiceWithConfig(dataDir)
 	userService := service.NewUserService()
-	certService := service.NewCertService()
+	certService := service.NewCertService(&cfg.Cert)
 	setupService := service.NewSetupService()
 	environmentService := service.NewEnvironmentService()
 	dnsService := service.NewDNSService()
@@ -41,17 +41,17 @@ func main() {
 	
 	// 初始化邮件服务器
 	mailServerConfig := &service.MailServerConfig{
-		Domain:         "localhost", // 默认域名，应该从配置中获取
-		DataDir:        "./data",
-		SMTPPort:       "2525",  // 非特权端口
-		SMTPSPort:      "4465",  // 非特权端口
-		IMAPPort:       "1143",  // 非特权端口 
-		IMAPSPort:      "9993",  // 非特权端口
-		MaxMessageSize: 25 * 1024 * 1024, // 25MB
-		MaxRecipients:  100,
-		TLSCertFile:    "./certs/server.crt",
-		TLSKeyFile:     "./certs/server.key",
-		EnableTLS:      false, // 初始时禁用TLS，避免证书问题
+		Domain:         cfg.Mail.Domain,
+		DataDir:        dataDir,
+		SMTPPort:       cfg.Mail.SMTPPort,
+		SMTPSPort:      cfg.Mail.SMTPSPort,
+		IMAPPort:       cfg.Mail.IMAPPort,
+		IMAPSPort:      cfg.Mail.IMAPSPort,
+		MaxMessageSize: cfg.Mail.MaxMessageSize,
+		MaxRecipients:  cfg.Mail.MaxRecipients,
+		TLSCertFile:    cfg.Mail.TLSCertFile,
+		TLSKeyFile:     cfg.Mail.TLSKeyFile,
+		EnableTLS:      cfg.Mail.EnableTLS,
 	}
 	
 	mailServer, err := service.NewMailServer(mailServerConfig, userService, domainService)

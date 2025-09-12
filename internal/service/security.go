@@ -38,7 +38,7 @@ func NewSecurityService() *SecurityService {
 		"sh":             false, // 禁用shell执行
 		"bash":           false, // 禁用bash执行
 		"wget":           false, // 禁用wget，安全风险太高
-		"acme.sh":        false, // 禁用acme.sh直接执行
+		"acme.sh":        true,  // 启用acme.sh用于证书管理，但限制参数
 	}
 
 	// 严格的域名验证正则
@@ -128,10 +128,17 @@ func (s *SecurityService) ExecuteSecureCommand(command string, args []string, ti
 		return nil, fmt.Errorf("命令 '%s' 不被允许执行", command)
 	}
 	
-	// 验证参数
-	for i, arg := range args {
-		if strings.ContainsAny(arg, ";|&$`\"'\\<>{}[]") {
-			return nil, fmt.Errorf("参数 %d 包含危险字符: %s", i, arg)
+	// 对acme.sh进行特殊安全验证
+	if command == "acme.sh" {
+		if err := s.validateAcmeCommand(args); err != nil {
+			return nil, fmt.Errorf("acme.sh参数验证失败: %v", err)
+		}
+	} else {
+		// 其他命令的通用参数验证
+		for i, arg := range args {
+			if strings.ContainsAny(arg, ";|&$`\"'\\<>{}[]") {
+				return nil, fmt.Errorf("参数 %d 包含危险字符: %s", i, arg)
+			}
 		}
 	}
 	
@@ -321,4 +328,79 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 	
 	log.Printf("INFO: 服务 %s 状态: %s", serviceName, status)
 	return status, nil
+}
+
+// validateAcmeCommand 验证acme.sh命令参数的安全性
+func (s *SecurityService) validateAcmeCommand(args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("acme.sh命令参数不能为空")
+	}
+	
+	// 允许的acme.sh操作
+	allowedOperations := map[string]bool{
+		"--issue":        true,
+		"--installcert":  true,
+		"--list":         true,
+		"--info":         true,
+		"--renew":        true,
+		"--revoke":       true,
+		"--upgrade":      true,
+		"--version":      true,
+		"--help":         true,
+	}
+	
+	// 允许的参数前缀
+	allowedParamPrefixes := []string{
+		"-d", "--domain",
+		"-w", "--webroot",
+		"--dns",
+		"--cert-file", "--key-file", "--ca-file", "--fullchain-file",
+		"--reloadcmd", "--postrun", "--renew-hook",
+		"--server", "--email", "--accountemail",
+		"--force", "--debug", "--log", "--syslog",
+	}
+	
+	// 检查第一个参数是否是允许的操作
+	if !allowedOperations[args[0]] {
+		return fmt.Errorf("不允许的acme.sh操作: %s", args[0])
+	}
+	
+	// 验证所有参数
+	for i, arg := range args {
+		// 跳过第一个操作参数
+		if i == 0 {
+			continue
+		}
+		
+		// 检查参数是否包含危险字符
+		if strings.ContainsAny(arg, ";|&$`\"'<>{}[]") {
+			return fmt.Errorf("参数包含危险字符: %s", arg)
+		}
+		
+		// 如果是选项参数，检查是否在允许列表中
+		if strings.HasPrefix(arg, "-") {
+			allowed := false
+			for _, prefix := range allowedParamPrefixes {
+				if strings.HasPrefix(arg, prefix) {
+					allowed = true
+					break
+				}
+			}
+			if !allowed {
+				return fmt.Errorf("不允许的acme.sh参数: %s", arg)
+			}
+		} else {
+			// 非选项参数，验证域名或路径格式
+			if strings.Contains(arg, ".") { // 可能是域名
+				if err := s.ValidateDomain(arg); err != nil {
+					// 如果不是有效域名，检查是否是安全的文件路径
+					if err := s.ValidateFilePath(arg); err != nil {
+						return fmt.Errorf("无效的域名或路径: %s", arg)
+					}
+				}
+			}
+		}
+	}
+	
+	return nil
 }
