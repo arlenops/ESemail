@@ -397,6 +397,7 @@ func (s *SecurityService) validateAcmeCommand(args []string) error {
 		"--pre-hook", "--post-hook", "--renew-hook",
 		"--staging", "--test",
 		"--httpport", "--tlsport", "--local-address",
+		"--webroot",
 	}
 	
 	// 检查第一个参数是否是允许的操作

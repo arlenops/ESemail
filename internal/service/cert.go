@@ -709,7 +709,9 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		return s.issueWithAutomaticDNS(req)
 	}
 	
-	// 手动DNS验证 - 使用更简单的方法
+	// 手动DNS验证 - 既然DNS记录已验证，尝试使用webroot模式完成申请
+	// webroot模式不需要socat，只需要能写入web目录
+	
 	email := req.Email
 	if email == "" && s.config.Email != "" {
 		email = s.config.Email
@@ -720,11 +722,26 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		server = "letsencrypt"
 	}
 	
-	// 使用standalone模式申请证书（假设80端口可用）
+	// 确保webroot目录存在
+	webroot := s.config.WebrootPath
+	if webroot == "" {
+		webroot = "/var/www/html"
+	}
+	
+	// 创建webroot目录（如果不存在）
+	if err := os.MkdirAll(webroot, 0755); err != nil {
+		return &DNSValidationResponse{
+			Success: false,
+			Error: fmt.Sprintf("DNS验证通过，但无法创建webroot目录 %s: %v。\n" +
+				"请手动完成证书申请或配置DNS API自动申请。", webroot, err),
+		}, nil
+	}
+	
+	// 使用webroot模式申请证书
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
-		"--standalone",
+		"--webroot", webroot,
 		"--server", server,
 		"--email", email,
 	}
@@ -739,7 +756,12 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error:   fmt.Sprintf("证书申请失败: %v, 输出: %s", err, string(output)),
+			Error: fmt.Sprintf("DNS验证通过，但webroot证书申请失败: %v\n输出: %s\n\n" +
+				"建议解决方案：\n" +
+				"1. 配置DNS API自动申请（最推荐）\n" +
+				"2. 确保 %s 目录可写且web服务器正常运行\n" +
+				"3. 手动完成证书申请", 
+				err, string(output), webroot),
 		}, nil
 	}
 	
@@ -747,7 +769,7 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	if err := s.installCertificateWithAcme(req.Domain); err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error:   fmt.Sprintf("证书安装失败: %v", err),
+			Error:   fmt.Sprintf("证书申请成功，但安装失败: %v", err),
 		}, nil
 	}
 	
