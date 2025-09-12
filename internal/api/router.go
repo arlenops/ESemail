@@ -368,6 +368,7 @@ func SetupRouter(
 				certs.GET("", certHandler.ListCertificates)
 				certs.POST("/issue", certHandler.IssueCertificate)
 				certs.POST("/validate-dns", certHandler.ValidateDNS)
+				certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
 				certs.POST("/renew", certHandler.RenewCertificates)
 			}
 		}

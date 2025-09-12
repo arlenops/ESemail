@@ -247,7 +247,15 @@ func (s *CertService) validateDomainAccessibility(domain string) error {
 
 // generateDNSValidationToken 生成DNS验证令牌
 func (s *CertService) generateDNSValidationToken(domain string) string {
-	// 生成一个模拟的验证令牌
+	// 检查是否已有待验证的挑战
+	if existingChallenge := s.getPendingChallenge(domain); existingChallenge != nil {
+		// 如果挑战还在有效期内（6小时内），复用相同的验证令牌
+		if time.Since(existingChallenge.CreatedAt) < 6*time.Hour {
+			return existingChallenge.DNSValue
+		}
+	}
+	
+	// 生成新的验证令牌
 	// 在实际实现中，这应该是ACME协议生成的真实验证令牌
 	return fmt.Sprintf("acme-validation-%s-%d", domain, time.Now().Unix())
 }
@@ -261,6 +269,9 @@ func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationRespo
 			Error:   "DNS记录名称或值不能为空",
 		}, nil
 	}
+	
+	// 从DNS记录名中提取域名
+	domain := strings.TrimPrefix(dnsName, "_acme-challenge.")
 	
 	// 使用dig命令验证DNS记录
 	args := []string{
@@ -290,14 +301,50 @@ func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationRespo
 	// dig返回的TXT记录会被引号包围，需要去除
 	foundValues := strings.Split(outputStr, "\n")
 	var foundValuesList []string
+	var validChallenge *PendingChallenge
 	
 	for _, value := range foundValues {
 		cleanValue := strings.Trim(value, "\" \t")
 		foundValuesList = append(foundValuesList, cleanValue)
+		
+		// 首先检查是否匹配当前请求的验证值
 		if cleanValue == dnsValue {
-			// DNS验证成功，现在完成证书申请
-			return s.completeDNSChallenge(dnsName, dnsValue)
+			validChallenge = s.getPendingChallenge(domain)
+			if validChallenge != nil {
+				break
+			}
 		}
+		
+		// 如果不匹配，检查是否匹配之前的任何有效挑战
+		if validChallenge == nil {
+			if challenge := s.getPendingChallenge(domain); challenge != nil {
+				if cleanValue == challenge.DNSValue {
+					validChallenge = challenge
+					break
+				}
+			}
+		}
+	}
+	
+	// 如果找到有效的挑战，进行验证
+	if validChallenge != nil {
+		return s.completeDNSChallenge(dnsName, validChallenge.DNSValue)
+	}
+	
+	// 如果没有找到匹配的记录，提供详细的帮助信息
+	currentChallenge := s.getPendingChallenge(domain)
+	if currentChallenge != nil {
+		return &DNSValidationResponse{
+			Success: false,
+			Error: fmt.Sprintf("DNS TXT记录值不匹配。\n"+
+				"期望值: %s\n"+
+				"找到值: %s\n"+
+				"请将DNS记录值更新为: %s\n"+
+				"或重新申请证书以获取新的验证信息", 
+				currentChallenge.DNSValue, 
+				strings.Join(foundValuesList, ", "),
+				currentChallenge.DNSValue),
+		}, nil
 	}
 	
 	return &DNSValidationResponse{
@@ -742,6 +789,12 @@ func (s *CertService) getPendingChallenge(domain string) *PendingChallenge {
 // removePendingChallenge 移除待验证的DNS挑战
 func (s *CertService) removePendingChallenge(domain string) {
 	delete(s.pendingChallenges, domain)
+}
+
+// GetCurrentDNSChallenge 获取当前有效的DNS验证信息
+func (s *CertService) GetCurrentDNSChallenge(domain string) (*PendingChallenge, error) {
+	challenge := s.getPendingChallenge(domain)
+	return challenge, nil
 }
 
 // isAcmeAvailable 检查acme.sh是否可用
