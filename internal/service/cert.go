@@ -136,6 +136,11 @@ func (s *CertService) IssueCertificate(req IssueCertRequest) (*DNSValidationResp
 
 // issueCertificateWithHTTP HTTP验证方式签发证书
 func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValidationResponse, error) {
+	// 检查acme.sh是否可用
+	if !s.isAcmeAvailable() {
+		return nil, fmt.Errorf("acme.sh未安装或不可用。请先安装acme.sh：curl https://get.acme.sh | sh")
+	}
+	
 	// 验证域名可访问性
 	if err := s.validateDomainAccessibility(req.Domain); err != nil {
 		return nil, fmt.Errorf("域名HTTP验证失败: %v", err)
@@ -177,7 +182,8 @@ func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValida
 	}
 	
 	// 执行证书申请
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 5*time.Minute)
+	acmePath := s.getAcmePath()
+	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("证书申请失败: %v, 输出: %s", err, string(output))
 	}
@@ -289,13 +295,19 @@ func (s *CertService) ValidateDNS(dnsName, dnsValue string) (*DNSValidationRespo
 }
 
 func (s *CertService) RenewCertificates() error {
+	// 检查acme.sh是否可用
+	if !s.isAcmeAvailable() {
+		return fmt.Errorf("acme.sh未安装或不可用。请先安装acme.sh：curl https://get.acme.sh | sh")
+	}
+	
 	// 使用acme.sh续签所有证书
 	args := []string{
 		"--renew-all",
 		"--force",  // 强制续签，即使证书还未到期
 	}
 	
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 5*time.Minute)
+	acmePath := s.getAcmePath()
+	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return fmt.Errorf("证书续签失败: %v, 输出: %s", err, string(output))
 	}
@@ -447,7 +459,8 @@ func (s *CertService) installCertificateWithAcme(domain string) error {
 		"--reloadcmd", "systemctl reload postfix dovecot", // 重新加载邮件服务
 	}
 	
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 2*time.Minute)
+	acmePath := s.getAcmePath()
+	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 2*time.Minute)
 	if err != nil {
 		return fmt.Errorf("证书安装失败: %v, 输出: %s", err, string(output))
 	}
@@ -507,7 +520,8 @@ func (s *CertService) issueWithAutomaticDNS(req IssueCertRequest) (*DNSValidatio
 	}
 	
 	// 执行自动DNS验证
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 5*time.Minute)
+	acmePath := s.getAcmePath()
+	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("自动DNS验证失败: %v, 输出: %s", err, string(output))
 	}
@@ -621,6 +635,14 @@ func (s *CertService) completeDNSChallenge(dnsName, dnsValue string) (*DNSValida
 func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*DNSValidationResponse, error) {
 	req := challenge.Request
 	
+	// 检查acme.sh是否可用
+	if !s.isAcmeAvailable() {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   "acme.sh未安装或不可用。请先安装acme.sh：curl https://get.acme.sh | sh",
+		}, nil
+	}
+	
 	// 检查是否有自动DNS配置
 	if s.hasAutomaticDNSProvider() {
 		// 使用自动DNS验证
@@ -652,7 +674,8 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	}
 	
 	// 执行证书申请
-	output, err := s.securityService.ExecuteSecureCommand("acme.sh", args, 5*time.Minute)
+	acmePath := s.getAcmePath()
+	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
@@ -706,6 +729,55 @@ func (s *CertService) getPendingChallenge(domain string) *PendingChallenge {
 // removePendingChallenge 移除待验证的DNS挑战
 func (s *CertService) removePendingChallenge(domain string) {
 	delete(s.pendingChallenges, domain)
+}
+
+// isAcmeAvailable 检查acme.sh是否可用
+func (s *CertService) isAcmeAvailable() bool {
+	// 检查多个可能的acme.sh路径
+	possiblePaths := []string{
+		"acme.sh",                    // PATH中
+		"/root/.acme.sh/acme.sh",     // 默认安装位置
+		"/home/acme/.acme.sh/acme.sh", // 用户安装位置
+		"/usr/local/bin/acme.sh",     // 系统安装位置
+		"/opt/acme.sh/acme.sh",       // 可选安装位置
+	}
+	
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		
+		// 对于PATH中的命令，尝试执行which
+		if path == "acme.sh" {
+			output, err := s.securityService.ExecuteSecureCommand("which", []string{"acme.sh"}, 5*time.Second)
+			if err == nil && len(output) > 0 {
+				return true
+			}
+		}
+	}
+	
+	return false
+}
+
+// getAcmePath 获取acme.sh的实际路径
+func (s *CertService) getAcmePath() string {
+	// 检查多个可能的acme.sh路径，按优先级排序
+	possiblePaths := []string{
+		"/root/.acme.sh/acme.sh",     // 默认安装位置（最常用）
+		"acme.sh",                    // PATH中
+		"/home/acme/.acme.sh/acme.sh", // 用户安装位置
+		"/usr/local/bin/acme.sh",     // 系统安装位置
+		"/opt/acme.sh/acme.sh",       // 可选安装位置
+	}
+	
+	for _, path := range possiblePaths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+	
+	// 如果都没找到，返回默认的acme.sh，让系统尝试从PATH查找
+	return "acme.sh"
 }
 
 // setCorrectCertPermissions 设置证书文件的正确权限

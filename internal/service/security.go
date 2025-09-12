@@ -34,6 +34,7 @@ func NewSecurityService() *SecurityService {
 		"openssl":        true,  // 允许openssl用于证书解析
 		"df":             true,  // 允许df用于磁盘使用率查询
 		"dig":            true,  // 允许dig用于DNS查询
+		"which":          true,  // 允许which用于查找命令路径
 		"curl":           false, // 禁用curl，安全风险太高
 		"sh":             false, // 禁用shell执行
 		"bash":           false, // 禁用bash执行
