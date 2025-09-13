@@ -366,6 +366,7 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 		challenge, exists = s.pendingChallenges[normalized]
 	}
     if !exists {
+        log.Printf("ERROR: 未找到DNS挑战信息 domain=%s keys=%v file=%s", domain, s.GetPendingDomains(), s.pendingFilePath)
         tried := []string{domain, s.normalizeDomain(domain)}
         return &LegoCertResponse{
             Success: false,
@@ -381,6 +382,13 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 
 	// 验证DNS记录是否已设置
     if ok, dbg := s.verifyDNSRecord(challenge.DNSName, challenge.DNSValue); !ok {
+        if dbg != nil {
+            if observed, ok2 := dbg["observed"]; ok2 {
+                log.Printf("ERROR: DNS验证失败 fqdn=%s expected=%s observed=%v", challenge.DNSName, challenge.DNSValue, observed)
+            } else {
+                log.Printf("ERROR: DNS验证失败 fqdn=%s expected=%s", challenge.DNSName, challenge.DNSValue)
+            }
+        }
         if dbg == nil { dbg = map[string]interface{}{} }
         dbg["dns_name"] = challenge.DNSName
         dbg["expected_value"] = challenge.DNSValue

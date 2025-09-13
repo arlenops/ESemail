@@ -77,29 +77,31 @@ func (h *CertHandler) IssueCertificate(c *gin.Context) {
 }
 
 func (h *CertHandler) ValidateDNS(c *gin.Context) {
-	domain := c.Param("domain")
-	if domain == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "域名参数不能为空"})
-		return
-	}
+    domain := c.Param("domain")
+    if domain == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "域名参数不能为空"})
+        return
+    }
 
-	result, err := h.certService.CompleteDNSChallenge(domain)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+    result, err := h.certService.CompleteDNSChallenge(domain)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
-	if result.Success {
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": result.Message,
-		})
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   result.Error,
-		})
-	}
+    if result.Success {
+        c.JSON(http.StatusOK, gin.H{
+            "success": true,
+            "message": result.Message,
+            "debug":   result.Debug,
+        })
+    } else {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "success": false,
+            "error":   result.Error,
+            "debug":   result.Debug,
+        })
+    }
 }
 
 func (h *CertHandler) GetDNSChallenge(c *gin.Context) {
