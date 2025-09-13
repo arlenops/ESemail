@@ -115,9 +115,14 @@ func NewCertService(config *config.CertConfig) (*CertService, error) {
 		pendingChallenges: make(map[string]*LegoDNSChallenge),
 	}
 
-	// 初始化用户和客户端
-	if err := service.initializeClient(); err != nil {
-		return nil, fmt.Errorf("初始化Lego客户端失败: %v", err)
+	// 只有在配置了有效邮箱时才初始化客户端
+	// 避免系统启动时因为示例邮箱导致失败
+	if config.Email != "" && config.Email != "admin@example.com" && !strings.Contains(config.Email, "example.") {
+		if err := service.initializeClient(); err != nil {
+			log.Printf("警告: 证书客户端初始化失败，将在首次申请证书时重新初始化: %v", err)
+		}
+	} else {
+		log.Printf("警告: 未配置有效的证书邮箱地址，证书功能将在配置后可用")
 	}
 
 	return service, nil
@@ -251,6 +256,25 @@ func (s *CertService) registerUser() error {
 // IssueDNSCert 开始DNS证书申请流程
 func (s *CertService) IssueDNSCert(domain, email string) (*LegoCertResponse, error) {
 	log.Printf("INFO: 开始为域名 %s 申请DNS证书", domain)
+
+	// 确保客户端已初始化
+	if s.legoClient == nil {
+		// 如果提供了邮箱，更新配置并初始化客户端
+		if email != "" && email != "admin@example.com" && !strings.Contains(email, "example.") {
+			s.config.Email = email
+			if err := s.initializeClient(); err != nil {
+				return &LegoCertResponse{
+					Success: false,
+					Error:   fmt.Sprintf("初始化证书客户端失败: %v", err),
+				}, nil
+			}
+		} else {
+			return &LegoCertResponse{
+				Success: false,
+				Error:   "证书服务未初始化，请提供有效的邮箱地址",
+			}, nil
+		}
+	}
 
 	// 1. 创建证书请求
 	request := certificate.ObtainRequest{

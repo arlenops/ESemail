@@ -1877,6 +1877,15 @@
                 <div class="modal-body">
                     <form id="issue-cert-form">
                         <div class="mb-3">
+                            <label for="cert-email" class="form-label">Let's Encrypt 账户邮箱 <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="cert-email" name="email" required
+                                   placeholder="用于接收证书到期通知和重要通知">
+                            <div class="form-text">
+                                <i class="fas fa-info-circle text-primary"></i>
+                                此邮箱将用于注册Let's Encrypt账户，接收证书相关通知。请确保邮箱有效且可以正常接收邮件。
+                            </div>
+                        </div>
+                        <div class="mb-3">
                             <label for="cert-domain" class="form-label">域名</label>
                             <select class="form-select" id="cert-domain" name="domain" required>
                                 <option value="">选择要签发证书的域名</option>
