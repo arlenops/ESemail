@@ -45,14 +45,14 @@ type WorkflowStep struct {
 	EstimateTime string   `json:"estimate_time"`
 }
 
-// WorkflowSteps 定义所有工作流步骤
+// WorkflowSteps 定义所有工作流步骤 - 优化版本
 var WorkflowSteps = []WorkflowStep{
 	{
 		ID:           1,
 		Name:         "system_init",
 		Title:        "系统初始化",
-		Description:  "配置基础系统设置，创建管理员账户，初始化数据存储",
-		Requirements: []string{"服务器基础环境", "网络连接"},
+		Description:  "配置基础系统设置，创建管理员账户，初始化数据存储。这是使用邮件系统的第一步，确保系统基础功能正常。",
+		Requirements: []string{"服务器基础环境", "网络连接", "管理员权限"},
 		APIEndpoints: []string{"/api/v1/system/*", "/api/v1/auth/login"},
 		IsRequired:   true,
 		EstimateTime: "2-3分钟",
@@ -61,48 +61,48 @@ var WorkflowSteps = []WorkflowStep{
 		ID:           2,
 		Name:         "domain_config",
 		Title:        "域名配置",
-		Description:  "添加邮件域名，配置基础DNS记录（MX记录）",
+		Description:  "添加您的邮件域名。添加域名后即可开始配置邮件用户和SSL证书，无需等待DNS验证完成。",
 		Requirements: []string{"拥有域名管理权限", "系统初始化完成"},
 		APIEndpoints: []string{"/api/v1/domains"},
-		IsRequired:   true,
-		EstimateTime: "5-10分钟",
-	},
-	{
-		ID:           3,
-		Name:         "dns_verification",
-		Title:        "DNS解析验证",
-		Description:  "验证所有必需的DNS记录：MX、SPF、DKIM、DMARC",
-		Requirements: []string{"域名已添加", "DNS记录已配置", "DNS传播完成（最多48小时）"},
-		APIEndpoints: []string{"/api/v1/dns/*", "/api/v1/domains/*/dns"},
-		IsRequired:   true,
-		EstimateTime: "10-30分钟",
-	},
-	{
-		ID:           4,
-		Name:         "ssl_certificate",
-		Title:        "SSL/TLS证书",
-		Description:  "配置HTTPS证书，启用邮件服务的TLS加密",
-		Requirements: []string{"域名DNS解析正常", "Let's Encrypt或上传证书"},
-		APIEndpoints: []string{"/api/v1/certificates/*"},
 		IsRequired:   true,
 		EstimateTime: "3-5分钟",
 	},
 	{
-		ID:           5,
+		ID:           3,
+		Name:         "ssl_certificate",
+		Title:        "SSL/TLS证书配置",
+		Description:  "为您的域名配置SSL证书，启用邮件服务的加密传输。支持自动申请Let's Encrypt证书或上传自有证书。",
+		Requirements: []string{"域名已添加", "可选：域名DNS解析正常（自动申请证书时需要）"},
+		APIEndpoints: []string{"/api/v1/certificates/*"},
+		IsRequired:   true,
+		EstimateTime: "3-10分钟",
+	},
+	{
+		ID:           4,
 		Name:         "user_management",
-		Title:        "用户管理",
-		Description:  "创建第一个邮件用户账户，验证登录功能",
-		Requirements: []string{"域名配置完成", "至少创建1个邮件用户"},
+		Title:        "邮件用户管理",
+		Description:  "创建第一个邮件用户账户。用户创建后即可开始收发邮件，建议先创建管理员邮箱用于测试。",
+		Requirements: []string{"域名已添加", "至少创建1个邮件用户"},
 		APIEndpoints: []string{"/api/v1/users"},
 		IsRequired:   true,
 		EstimateTime: "2-3分钟",
 	},
 	{
+		ID:           5,
+		Name:         "dns_verification",
+		Title:        "DNS记录配置与验证",
+		Description:  "配置必要的DNS记录（MX、SPF、DKIM、DMARC）以确保邮件正常收发和提高送达率。此步骤可与其他步骤并行进行。",
+		Requirements: []string{"域名已添加", "DNS记录已配置", "DNS传播完成（通常需要1-48小时）"},
+		APIEndpoints: []string{"/api/v1/dns/*", "/api/v1/domains/*/dns"},
+		IsRequired:   true,
+		EstimateTime: "10-30分钟（不含DNS传播时间）",
+	},
+	{
 		ID:           6,
 		Name:         "mail_service",
 		Title:        "邮件服务启用",
-		Description:  "启动SMTP/IMAP服务，进行邮件发送测试，验证权威性认证",
-		Requirements: []string{"用户已创建", "证书已配置", "DNS记录正常"},
+		Description:  "启动SMTP/IMAP服务，进行邮件发送测试。完成此步骤后，您的邮件系统即可正式投入使用。",
+		Requirements: []string{"用户已创建", "SSL证书已配置", "建议：DNS记录已验证"},
 		APIEndpoints: []string{"/api/v1/mail/*"},
 		IsRequired:   true,
 		EstimateTime: "5-10分钟",
@@ -236,12 +236,12 @@ func (ws *WorkflowService) validateStepRequirements(stepID int) error {
 		return ws.validateSystemInit()
 	case 2: // 域名配置
 		return ws.validateDomainConfig()
-	case 3: // DNS验证
-		return ws.validateDNSVerification()
-	case 4: // SSL证书
+	case 3: // SSL证书配置
 		return ws.validateSSLCertificate()
-	case 5: // 用户管理
+	case 4: // 用户管理
 		return ws.validateUserManagement()
+	case 5: // DNS验证
+		return ws.validateDNSVerification()
 	case 6: // 邮件服务
 		return ws.validateMailService()
 	default:
@@ -326,48 +326,69 @@ func (ws *WorkflowService) validateDNSVerification() error {
 	return nil
 }
 
-// validateSSLCertificate 验证SSL证书
+// validateSSLCertificate 验证SSL证书 - 更灵活的验证
 func (ws *WorkflowService) validateSSLCertificate() error {
 	if ws.certService == nil {
 		return fmt.Errorf("证书服务未初始化")
 	}
-	
+
+	// 检查是否有域名配置
+	if ws.domainService == nil {
+		return fmt.Errorf("域名服务未初始化")
+	}
+
+	domains, err := ws.domainService.ListDomains()
+	if err != nil {
+		return fmt.Errorf("获取域名列表失败: %v", err)
+	}
+
+	if len(domains) == 0 {
+		return fmt.Errorf("请先添加域名")
+	}
+
+	// SSL证书可以通过多种方式配置，不强制要求DNS验证完成
 	certs, err := ws.certService.ListCertificates()
 	if err != nil {
-		return err
+		return fmt.Errorf("获取证书列表失败: %v", err)
 	}
-	
-	// 检查是否有有效证书
-	hasValidCert := false
-	for _, cert := range certs {
-		if cert.Status == "valid" && time.Now().Before(cert.ExpiresAt) {
-			hasValidCert = true
-			break
-		}
+
+	// 检查是否有有效证书（允许各种状态的证书）
+	if len(certs) == 0 {
+		return fmt.Errorf("请为域名配置SSL证书")
 	}
-	
-	if !hasValidCert {
-		return fmt.Errorf("没有有效的SSL证书")
-	}
-	
+
 	return nil
 }
 
-// validateUserManagement 验证用户管理
+// validateUserManagement 验证用户管理 - 只需要域名配置完成
 func (ws *WorkflowService) validateUserManagement() error {
 	if ws.userService == nil {
 		return fmt.Errorf("用户服务未初始化")
 	}
-	
+
+	// 检查是否有域名配置
+	if ws.domainService == nil {
+		return fmt.Errorf("域名服务未初始化")
+	}
+
+	domains, err := ws.domainService.ListDomains()
+	if err != nil {
+		return fmt.Errorf("获取域名列表失败: %v", err)
+	}
+
+	if len(domains) == 0 {
+		return fmt.Errorf("请先添加域名")
+	}
+
 	users, err := ws.userService.ListUsers()
 	if err != nil {
-		return err
+		return fmt.Errorf("获取用户列表失败: %v", err)
 	}
-	
+
 	if len(users) == 0 {
 		return fmt.Errorf("至少需要创建一个邮件用户")
 	}
-	
+
 	// 检查用户是否激活
 	hasActiveUser := false
 	for _, user := range users {
@@ -376,11 +397,11 @@ func (ws *WorkflowService) validateUserManagement() error {
 			break
 		}
 	}
-	
+
 	if !hasActiveUser {
 		return fmt.Errorf("至少需要一个激活的邮件用户")
 	}
-	
+
 	return nil
 }
 

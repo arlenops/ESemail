@@ -127,7 +127,7 @@ func (h *WorkflowHandler) CheckStepRequirements(c *gin.Context) {
 	})
 }
 
-// checkStepRequirements 检查特定步骤的要求
+// checkStepRequirements 检查特定步骤的要求 - 更新的步骤顺序
 func (h *WorkflowHandler) checkStepRequirements(stepID int) map[string]interface{} {
 	results := make(map[string]interface{})
 
@@ -136,12 +136,12 @@ func (h *WorkflowHandler) checkStepRequirements(stepID int) map[string]interface
 		results["system_status"] = h.checkSystemStatus()
 	case 2: // 域名配置
 		results["domain_status"] = h.checkDomainStatus()
-	case 3: // DNS验证
-		results["dns_status"] = h.checkDNSStatus()
-	case 4: // SSL证书
+	case 3: // SSL证书配置
 		results["ssl_status"] = h.checkSSLStatus()
-	case 5: // 用户管理
+	case 4: // 用户管理
 		results["user_status"] = h.checkUserStatus()
+	case 5: // DNS验证
+		results["dns_status"] = h.checkDNSStatus()
 	case 6: // 邮件服务
 		results["mail_status"] = h.checkMailStatus()
 	}

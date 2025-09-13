@@ -41,7 +41,7 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 		// 获取工作流状态
 		state := workflowService.GetCurrentState()
 		
-		// 根据步骤进度控制API访问
+		// 根据步骤进度控制API访问 - 更新的步骤顺序
 		if strings.HasPrefix(path, "/api/v1/domains") {
 			// 域名管理需要系统初始化完成
 			if state.CurrentStep < 2 {
@@ -55,37 +55,37 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 				return
 			}
 		} else if strings.HasPrefix(path, "/api/v1/certificates") {
-			// 证书管理需要域名配置完成
-			if state.CurrentStep < 4 {
+			// 证书管理需要域名配置完成（步骤3）
+			if state.CurrentStep < 3 {
 				c.JSON(http.StatusLocked, gin.H{
 					"success": false,
-					"error":   "功能未解锁", 
-					"message": "请先完成域名配置和DNS验证",
-					"required_step": "DNS验证",
+					"error":   "功能未解锁",
+					"message": "请先完成域名配置",
+					"required_step": "域名配置",
 				})
 				c.Abort()
 				return
 			}
 		} else if strings.HasPrefix(path, "/api/v1/users") {
-			// 用户管理需要SSL证书配置完成
-			if state.CurrentStep < 5 {
+			// 用户管理需要域名配置完成（步骤4）
+			if state.CurrentStep < 4 {
 				c.JSON(http.StatusLocked, gin.H{
 					"success": false,
 					"error":   "功能未解锁",
-					"message": "请先完成SSL证书配置", 
-					"required_step": "SSL证书",
+					"message": "请先完成域名配置",
+					"required_step": "域名配置",
 				})
 				c.Abort()
 				return
 			}
 		} else if strings.HasPrefix(path, "/api/v1/mail") {
-			// 邮件服务需要用户管理完成
+			// 邮件服务需要用户管理完成（步骤6）
 			if state.CurrentStep < 6 {
 				c.JSON(http.StatusLocked, gin.H{
 					"success": false,
 					"error":   "功能未解锁",
-					"message": "请先完成用户管理",
-					"required_step": "用户管理", 
+					"message": "请先完成用户管理和SSL证书配置",
+					"required_step": "用户管理",
 				})
 				c.Abort()
 				return

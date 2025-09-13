@@ -1,15 +1,21 @@
 let currentSection = 'dashboard';
 let healthData = null;
+let unlockStatus = {}; // 缓存解锁状态
 
 document.addEventListener('DOMContentLoaded', function() {
     // 检查认证状态
     if (!checkAuthToken()) {
         return;
     }
-    
+
     initializeEventListeners();
     checkSystemStatus();
+    // 初始检查解锁状态
+    checkUnlockStatus();
+    // 定期刷新
     setInterval(refreshDashboard, 30000);
+    // 定期检查解锁状态
+    setInterval(checkUnlockStatus, 10000);
 });
 
 // 检查认证令牌
@@ -102,6 +108,133 @@ function showInitializationModal() {
     modal.show();
 }
 
+// 检查功能解锁状态
+async function checkUnlockStatus() {
+    try {
+        const response = await fetch('/api/v1/workflow/unlock-status');
+        const data = await response.json();
+
+        if (data.success) {
+            const newUnlockStatus = data.unlock_status;
+            // 检查状态是否有变化
+            if (JSON.stringify(newUnlockStatus) !== JSON.stringify(unlockStatus)) {
+                unlockStatus = newUnlockStatus;
+                updateNavigationUI();
+                console.log('功能解锁状态已更新:', unlockStatus);
+            }
+        }
+    } catch (error) {
+        console.error('检查解锁状态失败:', error);
+    }
+}
+
+// 更新导航UI
+function updateNavigationUI() {
+    const navLinks = document.querySelectorAll('.sidebar .nav-link');
+
+    navLinks.forEach(link => {
+        const section = link.getAttribute('data-section');
+
+        // 移除现有状态
+        link.classList.remove('disabled');
+        link.style.pointerEvents = '';
+        link.style.opacity = '';
+
+        // 移除旧的点击事件
+        const newLink = link.cloneNode(true);
+        link.parentNode.replaceChild(newLink, link);
+
+        // 根据解锁状态更新
+        switch(section) {
+            case 'domains':
+                if (!unlockStatus.domain_config) {
+                    newLink.classList.add('disabled');
+                    newLink.href = 'javascript:void(0)';
+                    newLink.onclick = () => showLockMessage('域名管理', '系统初始化');
+                } else {
+                    newLink.href = '#domains';
+                    newLink.onclick = (e) => { e.preventDefault(); switchSection('domains'); };
+                }
+                break;
+
+            case 'certificates':
+                if (!unlockStatus.ssl_config) {
+                    newLink.classList.add('disabled');
+                    newLink.href = 'javascript:void(0)';
+                    newLink.onclick = () => showLockMessage('证书管理', '域名配置');
+                } else {
+                    newLink.href = '#certificates';
+                    newLink.onclick = (e) => { e.preventDefault(); switchSection('certificates'); };
+                }
+                break;
+
+            case 'users':
+                if (!unlockStatus.user_mgmt) {
+                    newLink.classList.add('disabled');
+                    newLink.href = 'javascript:void(0)';
+                    newLink.onclick = () => showLockMessage('用户管理', '域名配置');
+                } else {
+                    newLink.href = '#users';
+                    newLink.onclick = (e) => { e.preventDefault(); switchSection('users'); };
+                }
+                break;
+
+            case 'mail':
+                if (!unlockStatus.mail_service) {
+                    newLink.classList.add('disabled');
+                    newLink.href = 'javascript:void(0)';
+                    newLink.onclick = () => showLockMessage('邮件服务', '用户管理和SSL证书配置');
+                } else {
+                    newLink.href = '#mail';
+                    newLink.onclick = (e) => { e.preventDefault(); switchSection('mail'); };
+                }
+                break;
+
+            default:
+                // 其他链接保持原有行为
+                if (newLink.getAttribute('href').startsWith('#')) {
+                    newLink.onclick = (e) => { e.preventDefault(); switchSection(section); };
+                }
+        }
+    });
+}
+
+// 显示功能锁定提示
+function showLockMessage(feature, requiredStep) {
+    // 创建现代化的提示模态框，而不是使用alert
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-warning text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-lock me-2"></i>功能未解锁
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <i class="fas fa-exclamation-triangle text-warning fa-3x mb-3"></i>
+                    <h5>${feature} 功能尚未解锁</h5>
+                    <p class="text-muted">请先完成：<strong>${requiredStep}</strong></p>
+                    <a href="/workflow" class="btn btn-primary mt-2">
+                        <i class="fas fa-arrow-right me-2"></i>前往工作流向导
+                    </a>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+
+    // 模态框关闭时清理DOM
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+}
+
 async function initializeSystem() {
     const btn = document.getElementById('init-system-btn');
     const progress = document.getElementById('init-progress');
@@ -130,7 +263,9 @@ async function initializeSystem() {
         });
         
         if (result.success) {
-            setTimeout(() => {
+            // 系统初始化成功后立即检查解锁状态
+            setTimeout(async () => {
+                await checkUnlockStatus();
                 location.reload();
             }, 2000);
         } else {
@@ -565,6 +700,8 @@ async function addDomain(e) {
             bootstrap.Modal.getInstance(document.getElementById('add-domain-modal')).hide();
             // 清空表单
             document.getElementById('add-domain-form').reset();
+            // 立即检查解锁状态
+            await checkUnlockStatus();
             // 重新加载域名列表
             loadDomains();
             // 显示DNS设置引导

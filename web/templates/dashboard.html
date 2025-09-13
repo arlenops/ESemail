@@ -7,9 +7,10 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
-    <link href="/static/css/modern-theme.css" rel="stylesheet">
+    <link href="/static/css/clean-modern.css" rel="stylesheet">
     <script src="/static/js/bootstrap.bundle.min.js"></script>
     <script src="/static/js/chart.js"></script>
+    <script src="/static/js/notification.js"></script>
     <script src="/static/js/dashboard.js"></script>
     <script src="/static/js/mail.js"></script>
     
@@ -646,8 +647,8 @@
         }
         
         // 登出功能
-        function logout() {
-            if (confirm('确定要退出吗？')) {
+        async function logout() {
+            if (await showConfirm('确定要退出吗？', '确认退出')) {
                 apiRequest('/api/v1/auth/logout', { method: 'POST' })
                 .finally(() => {
                     localStorage.removeItem('auth_token');
@@ -658,22 +659,22 @@
         }
         
         // 修改密码功能
-        function changePassword() {
-            const oldPassword = prompt('请输入当前密码：');
+        async function changePassword() {
+            const oldPassword = await showPrompt('请输入当前密码：', '修改密码', '', { inputType: 'password' });
             if (!oldPassword) return;
-            
-            const newPassword = prompt('请输入新密码（至少8位）：');
+
+            const newPassword = await showPrompt('请输入新密码（至少8位）：', '设置新密码', '', { inputType: 'password' });
             if (!newPassword || newPassword.length < 8) {
-                alert('新密码长度至少8位');
+                showAlert('新密码长度至少8位', '密码验证失败', 'warning');
                 return;
             }
-            
-            const confirmPassword = prompt('请确认新密码：');
+
+            const confirmPassword = await showPrompt('请确认新密码：', '确认新密码', '', { inputType: 'password' });
             if (newPassword !== confirmPassword) {
-                alert('两次输入的密码不一致');
+                showAlert('两次输入的密码不一致', '密码验证失败', 'warning');
                 return;
             }
-            
+
             apiRequest('/api/v1/auth/change-password', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -684,14 +685,14 @@
             .then(response => response.json())
             .then(data => {
                 if (data.message) {
-                    alert('密码修改成功');
+                    showAlert('密码修改成功', '操作成功', 'success');
                 } else {
-                    alert('密码修改失败：' + data.error);
+                    showAlert('密码修改失败：' + data.error, '操作失败', 'error');
                 }
             })
             .catch(error => {
                 console.error('修改密码失败:', error);
-                alert('修改密码失败');
+                showAlert('修改密码失败', '网络错误', 'error');
             });
         }
         
@@ -1467,7 +1468,7 @@
                 if (response.ok) {
                     const result = await response.json();
                     console.log('用户创建成功:', result);
-                    alert('用户创建成功！');
+                    showAlert('用户创建成功！', '操作成功', 'success');
                     
                     // 关闭模态框
                     const modal = bootstrap.Modal.getInstance(document.getElementById('add-user-modal'));
@@ -1482,11 +1483,11 @@
                     loadUsers();
                 } else {
                     const error = await response.json();
-                    alert('用户创建失败: ' + (error.error || '未知错误'));
+                    showAlert('用户创建失败: ' + (error.error || '未知错误'), '操作失败', 'error');
                 }
             } catch (error) {
                 console.error('创建用户失败:', error);
-                alert('创建用户失败: ' + error.message);
+                showAlert('创建用户失败: ' + error.message, '网络错误', 'error');
             }
         }
 
@@ -1526,7 +1527,7 @@
 
         // 删除用户
         async function deleteUser(userId) {
-            if (!confirm('确定要删除该用户吗？此操作不可撤销。')) {
+            if (!(await showConfirm('确定要删除该用户吗？此操作不可撤销。', '删除用户确认', { dangerConfirm: true }))) {
                 return;
             }
             
@@ -1536,7 +1537,7 @@
                 });
                 
                 if (response.ok) {
-                    alert('用户删除成功');
+                    showAlert('用户删除成功', '操作成功', 'success');
                     loadUsers(); // 刷新列表
                 } else {
                     const error = await response.json();

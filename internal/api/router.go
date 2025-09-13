@@ -154,14 +154,14 @@ func SetupRouter(
 		// 检查系统是否已初始化
 		initStatus := systemService.GetInitializationStatus()
 		
-		// 计算功能解锁状态 - 简化为关键步骤
+		// 计算功能解锁状态 - 更新的步骤顺序
 		unlockStatus := map[string]bool{
 			"system_init":    initStatus["is_initialized"].(bool),
-			"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep > 1),
-			"dns_verified":   containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2, // 域名完成后可进行DNS验证
-			"ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2, // 域名完成后可配置SSL
-			"user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep > 2, // 域名完成后可管理用户
-			"mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep > 5, // 用户创建后可使用邮件服务
+			"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
+			"ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3, // SSL配置在步骤3，需要域名配置完成
+			"user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4, // 用户管理在步骤4，需要域名配置完成
+			"dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5, // DNS验证在步骤5
+			"mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6, // 邮件服务在步骤6，需要用户管理完成
 			"setup_complete": state.IsSetupComplete,
 		}
 		
@@ -300,6 +300,28 @@ func SetupRouter(
 			workflow.POST("/complete/:id", workflowHandler.CompleteStep)
 			workflow.GET("/check/:id", workflowHandler.CheckStepRequirements)
 			workflow.POST("/reset", workflowHandler.ResetWorkflow) // 仅用于开发测试
+
+			// 获取功能解锁状态
+			workflow.GET("/unlock-status", func(c *gin.Context) {
+				state := workflowService.GetCurrentState()
+				initStatus := systemService.GetInitializationStatus()
+
+				unlockStatus := map[string]bool{
+					"system_init":    initStatus["is_initialized"].(bool),
+					"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
+					"ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
+					"user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
+					"dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
+					"mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6,
+					"setup_complete": state.IsSetupComplete,
+				}
+
+				c.JSON(http.StatusOK, gin.H{
+					"success": true,
+					"unlock_status": unlockStatus,
+					"workflow_state": state,
+				})
+			})
 		}
 
 		// DNS检查（无需认证）
