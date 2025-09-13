@@ -382,6 +382,7 @@ func (s *SecurityService) validateAcmeCommand(args []string) error {
 		"--version":        true,
 		"--help":           true,
 		"--remove-account": true,
+		"--remove":         true,
 	}
 	
 	// 允许的参数前缀

@@ -194,6 +194,13 @@ func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValida
 	cleanArgs := []string{"--remove-account", "--server", server}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
 	
+	// 最后的安全检查 - 绝对禁止.local域名邮箱
+	if strings.Contains(email, ".local") {
+		fmt.Printf("[EMERGENCY] HTTP验证检测到.local域名邮箱，强制替换: %s\n", email)
+		email = "admin@gmail.com"
+		fmt.Printf("[EMERGENCY] HTTP验证紧急替换为: %s\n", email)
+	}
+	
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
@@ -608,6 +615,13 @@ func (s *CertService) issueWithAutomaticDNS(req IssueCertRequest) (*DNSValidatio
 	cleanArgs := []string{"--remove-account", "--server", server}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
 	
+	// 最后的安全检查 - 绝对禁止.local域名邮箱
+	if strings.Contains(email, ".local") {
+		fmt.Printf("[EMERGENCY] 自动DNS验证检测到.local域名邮箱，强制替换: %s\n", email)
+		email = "admin@gmail.com"
+		fmt.Printf("[EMERGENCY] 自动DNS验证紧急替换为: %s\n", email)
+	}
+	
 	// 构建acme.sh命令
 	args := []string{
 		"--issue",
@@ -793,10 +807,30 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 原始邮箱: %s\n", req.Email)
 	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 最终使用邮箱: %s\n", email)
 	
-	// 清理可能存在的错误ACME账户缓存
+	// 强制清理所有可能的ACME缓存和配置
 	acmePath := s.getAcmePath()
+	
+	// 1. 清理账户缓存
 	cleanArgs := []string{"--remove-account", "--server", server}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
+	
+	// 2. 清理域名相关的配置
+	cleanDomainArgs := []string{"--remove", "-d", req.Domain}
+	s.securityService.ExecuteSecureCommand(acmePath, cleanDomainArgs, 30*time.Second)
+	
+	// 3. 强制验证邮箱，确保没有被替换
+	if !s.isValidEmailForAcme(email) {
+		fmt.Printf("[ERROR] 邮箱验证失败，使用安全回退: %s\n", email)
+		email = "admin@gmail.com"
+	}
+	fmt.Printf("[FINAL CHECK] 最终确认使用邮箱: %s\n", email)
+	
+	// 最后的安全检查 - 绝对禁止.local域名邮箱
+	if strings.Contains(email, ".local") {
+		fmt.Printf("[EMERGENCY] 检测到.local域名邮箱，强制替换: %s\n", email)
+		email = "admin@gmail.com"
+		fmt.Printf("[EMERGENCY] 紧急替换为: %s\n", email)
+	}
 	
 	// 使用webroot模式申请证书，添加更多调试参数
 	args := []string{
@@ -945,6 +979,14 @@ func (s *CertService) isValidEmailForAcme(email string) bool {
 	
 	domain := strings.ToLower(parts[1])
 	username := strings.ToLower(parts[0])
+	
+	// 严格排除所有可能的问题域名
+	if strings.HasSuffix(domain, ".local") || 
+	   strings.Contains(domain, "localhost") ||
+	   domain == "local" ||
+	   strings.Contains(domain, ".localdomain") {
+		return false
+	}
 	
 	// 检查是否是纯数字用户名（通常被认为是临时邮箱）
 	if isNumericOnly(username) {
