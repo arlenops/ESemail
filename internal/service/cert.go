@@ -846,15 +846,18 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		fmt.Printf("[REGISTER SUCCESS] 账户注册成功\n")
 	}
 	
-	// 使用webroot方式申请证书，因为DNS验证已经通过，ACME可以直接颁发
+	// 既然DNS验证已通过，尝试直接安装已有证书或使用standalone模式
+	// 首先检查是否已有有效证书
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
-		"-w", webroot,  // 使用webroot验证
+		"--standalone",   // 使用standalone模式，不需要web服务器
+		"--httpport", "8080",  // 使用非特权端口
 		"--server", server,
 		"--email", email,
 		"--debug", "2",  // 启用详细调试
 		"--log",         // 启用日志记录
+		"--force",       // 强制申请
 	}
 	
 	if s.config.ForceRenewal {
@@ -868,10 +871,11 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 			Success: false,
 			Error: fmt.Sprintf("DNS验证通过，但证书申请失败: %v\n输出: %s\n\n" +
 				"可能的原因：\n" +
-				"1. webroot目录 %s 不可写或web服务器未运行\n" +
+				"1. 端口8080被占用，请检查端口使用情况\n" +
 				"2. DNS记录还未完全生效，请等待几分钟后重试\n" +
-				"3. Let's Encrypt服务器可能暂时不可用", 
-				err, string(output), webroot),
+				"3. Let's Encrypt服务器可能暂时不可用\n" +
+				"4. 建议配置DNS API自动验证以避免此问题", 
+				err, string(output)),
 		}, nil
 	}
 	
