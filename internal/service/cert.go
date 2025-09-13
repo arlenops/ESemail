@@ -776,11 +776,15 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		}, nil
 	}
 	
+	// 添加调试日志，确认实际使用的邮箱
+	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 原始邮箱: %s\n", req.Email)
+	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 最终使用邮箱: %s\n", email)
+	
 	// 使用webroot模式申请证书
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
-		"--webroot", webroot,
+		"-w", webroot,  // 使用-w而不是--webroot
 		"--server", server,
 		"--email", email,
 	}
@@ -921,38 +925,27 @@ func (s *CertService) isValidEmailForAcme(email string) bool {
 	}
 	
 	domain := strings.ToLower(parts[1])
+	username := strings.ToLower(parts[0])
 	
-	// 直接检查已知的有效公共邮箱域名
+	// 检查是否是纯数字用户名（通常被认为是临时邮箱）
+	if isNumericOnly(username) {
+		return false
+	}
+	
+	// 只允许最可靠的国际邮箱服务商，排除可能有问题的域名
 	validDomains := []string{
 		"gmail.com",
 		"googlemail.com",
 		"outlook.com", 
 		"hotmail.com",
 		"live.com",
-		"msn.com",
 		"yahoo.com",
-		"yahoo.co.uk",
-		"yahoo.co.jp",
 		"aol.com",
 		"icloud.com",
-		"me.com",
-		"mac.com",
 		"protonmail.com",
-		"proton.me",
-		"mail.com",
-		"zoho.com",
-		"yandex.com",
-		"mail.ru",
-		"qq.com",
-		"163.com",
-		"126.com",
-		"sina.com",
-		"sohu.com",
-		"foxmail.com",
 		"fastmail.com",
-		"tutanota.com",
-		"gmx.com",
-		"web.de",
+		"zoho.com",
+		// 暂时移除qq.com、163.com等可能有问题的域名
 	}
 	
 	// 如果是已知的有效域名，直接返回true
@@ -1029,4 +1022,17 @@ func (s *CertService) setCorrectCertPermissions(certDir string) error {
 	}
 	
 	return nil
+}
+
+// isNumericOnly 检查字符串是否只包含数字
+func isNumericOnly(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, char := range s {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
