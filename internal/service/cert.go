@@ -209,7 +209,6 @@ func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValida
 	}
 	
 	// 执行证书申请
-	acmePath := s.getAcmePath()
 	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("证书申请失败: %v, 输出: %s", err, string(output))
@@ -815,7 +814,6 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	}
 	
 	// 执行证书申请
-	acmePath := s.getAcmePath()
 	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return &DNSValidationResponse{
