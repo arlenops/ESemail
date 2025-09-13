@@ -17,7 +17,6 @@ import (
 
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge/dns01"
-	"github.com/go-acme/lego/v4/challenge/http01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 )
@@ -575,8 +574,8 @@ func (s *CertService) IssueHTTPCert(domain, email string) (*LegoCertResponse, er
 		}, nil
 	}
 
-	// 禁用DNS挑战（如果之前启用了）
-	s.legoClient.Challenge.Exclude([]string{"dns-01"})
+	// 禁用DNS挑战，只使用HTTP挑战
+	// 注意：lego库会根据设置的provider自动选择挑战类型
 
 	// 创建证书请求
 	request := certificate.ObtainRequest{
@@ -607,7 +606,7 @@ func (s *CertService) IssueHTTPCert(domain, email string) (*LegoCertResponse, er
 	}
 
 	// 证书获取成功，保存证书
-	if err := s.saveCertificate(domain, cert); err != nil {
+	if err := s.installCertificate(domain, cert); err != nil {
 		return &LegoCertResponse{
 			Success: false,
 			Error:   fmt.Sprintf("保存证书失败: %v", err),
@@ -664,7 +663,7 @@ func (s *CertService) CompleteHTTPChallenge(domain string) (*LegoCertResponse, e
 	}
 
 	// 证书获取成功，保存证书
-	if err := s.saveCertificate(domain, cert); err != nil {
+	if err := s.installCertificate(domain, cert); err != nil {
 		return &LegoCertResponse{
 			Success: false,
 			Error:   fmt.Sprintf("保存证书失败: %v", err),

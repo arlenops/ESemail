@@ -184,7 +184,7 @@ func SetupRouter(
 
 		// 检查是否有对应的HTTP挑战文件
 		// 使用证书服务的路径配置
-		challengePath := filepath.Join(cfg.CertPath, "acme-challenges", token)
+		challengePath := filepath.Join(cfg.Cert.CertPath, "acme-challenges", token)
 		if content, err := os.ReadFile(challengePath); err == nil {
 			c.Header("Content-Type", "text/plain")
 			c.String(http.StatusOK, string(content))
