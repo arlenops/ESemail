@@ -3,11 +3,7 @@
 ## 🚀 一键部署（本地）
 
 ```bash
-# 准备配置（首次使用）
-cp config/config.example.yaml config/config.yaml
-# 编辑 config/config.yaml，至少设置 cert.email 为有效邮箱
-
-# 拉取最新代码并执行部署
+# 拉取最新代码并执行部署（无需本地配置文件）
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -47,37 +43,51 @@ cd /opt/ESemail
 ./deploy.sh
 ```
 
-## 🧪 API测试
+## 🧪 API 测试与配置管理
 
-### 测试系统状态：
+### 系统状态
 ```bash
 curl http://localhost:8686/api/v1/setup/status
 curl http://localhost:8686/api/v1/system/status
 ```
 
-### 测试系统初始化（现在应该返回200）：
+### 系统初始化（返回 200 表示触发成功）
 ```bash
 curl -X POST http://localhost:8686/api/v1/system/init
 ```
 
-### 配置系统：
+### 登录获取 Token
 ```bash
-curl -X POST http://localhost:8686/api/v1/setup/configure \
+curl -s -X POST http://localhost:8686/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"admin"}'
+```
+
+### 应用配置（前端/API 管理）
+- 获取配置：
+```bash
+curl -H "Authorization: Bearer <TOKEN>" \
+  http://localhost:8686/api/v1/config
+```
+
+- 更新配置（仅非空字段覆盖）：
+```bash
+curl -s -X POST http://localhost:8686/api/v1/config \
+  -H "Authorization: Bearer <TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "domain": "yourdomain.com",
-    "admin_email": "admin@yourdomain.com",
-    "hostname": "mail.yourdomain.com", 
-    "admin_name": "Admin",
-    "admin_pass": "your_password"
+    "mail": {"domain": "yourdomain.com", "admin_email": "admin@yourdomain.com"},
+    "cert": {"email": "admin@yourdomain.com", "server": "letsencrypt", "cert_path": "/etc/ssl/mail"}
   }'
 ```
+
+提示：配置会持久化到 `./data/config/app.json`，重启后仍生效。
 
 ## 🌐 访问方式
 
 - 本地访问: http://localhost:8686
 
-## 📁 目录结构
+## 📁 目录结构（关键）
 
 ```
 /opt/ESemail/
@@ -86,8 +96,8 @@ curl -X POST http://localhost:8686/api/v1/setup/configure \
 ├── stop.sh         # 停止脚本
 ├── logs/           # 日志目录
 │   └── app.log     # 应用日志
-├── config/         # 配置文件
-├── data/           # 数据文件
+├── config/         # 系统生成的服务配置（postfix/dovecot/opendkim 等）
+├── data/           # 数据文件（domains/users/workflow/app.json 等）
 └── mail/           # 邮件存储
 ```
 
@@ -98,29 +108,34 @@ curl -X POST http://localhost:8686/api/v1/setup/configure \
 3. 每次部署都会拉取最新代码，确保使用最新版本
 4. 如果部署失败，会显示详细的错误日志
 
-## 🔐 证书邮箱配置
+## 🔐 证书签发（DNS-01，本机验证）
 
-- 证书申请统一从配置项 `cert.email` 注入，不再从 API 参数传入。
-- 请在配置文件或环境变量中设置有效邮箱，否则证书签发会被拒绝。
-
-示例（config.yaml）：
-
-```yaml
-cert:
-  email: "admin@yourdomain.com"
-```
-
-进阶（受限网络/本地验证）
-- 使用系统解析器进行本地验证（不直连公共DNS）：
-  - `export CERT_DNS_MODE=system`
-- 跳过本地预校验，直接交给 ACME 验证（谨慎使用）：
-  - `export CERT_SKIP_PRECHECK=true`
-- 自定义解析器（逗号分隔）：
-  - `export DNS_RESOLVERS="223.5.5.5:53,119.29.29.29:53"`
-
-也可通过环境变量指定配置文件路径（deploy.sh 会自动识别 config/config.yaml）：
-
+1) 设置证书邮箱（前端/API）：
 ```bash
-export ESEMAIL_CONFIG=$(pwd)/config/config.yaml
-./esemail
+curl -s -X POST http://localhost:8686/api/v1/certificates/settings \
+  -H "Authorization: Bearer <TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@yourdomain.com"}'
 ```
+
+2) 发起挑战，获取 TXT 记录：
+```bash
+curl -s -X POST http://localhost:8686/api/v1/domains/mail.yourdomain.com/ssl/request \
+  -H "Authorization: Bearer <TOKEN>"
+```
+响应包含 `dns_name` 与 `dns_value`。
+
+3) 在 DNS 平台添加 TXT 记录：名称 = `dns_name`，值 = `dns_value`。
+
+4) 完成验证并安装证书：
+```bash
+curl -s -X POST http://localhost:8686/api/v1/certificates/validate-dns/mail.yourdomain.com \
+  -H "Authorization: Bearer <TOKEN>"
+```
+失败时返回 `debug.observed`（本机 dig 解析到的 TXT 值），用于快速排查。
+
+可选调试：
+- 挂起挑战列表：`GET /api/v1/certificates/pending`
+- 查看某域名挑战：`GET /api/v1/certificates/dns-challenge/:domain`
+
+依赖：请确保本机已安装 `dig`（Ubuntu/Debian: `apt install -y dnsutils`）。
