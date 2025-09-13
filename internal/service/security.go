@@ -369,6 +369,11 @@ func (s *SecurityService) validateAcmeShPath(path string) error {
 		}
 	}
 	
+	// 允许临时目录中的acme.sh（用于重新安装）
+	if strings.HasPrefix(path, "/tmp/acme-") && strings.HasSuffix(path, "/acme.sh") {
+		return nil
+	}
+	
 	return fmt.Errorf("不允许的acme.sh路径: %s", path)
 }
 
