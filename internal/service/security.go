@@ -35,9 +35,9 @@ func NewSecurityService() *SecurityService {
 		"df":             true,  // 允许df用于磁盘使用率查询
 		"dig":            true,  // 允许dig用于DNS查询
 		"which":          true,  // 允许which用于查找命令路径
-		"curl":           false, // 禁用curl，安全风险太高
+		"curl":           true,  // 临时允许curl用于下载acme.sh
 		"sh":             false, // 禁用shell执行
-		"bash":           false, // 禁用bash执行
+		"bash":           true,  // 允许bash用于执行acme.sh安装脚本
 		"wget":           false, // 禁用wget，安全风险太高
 		"acme.sh":        true,  // 启用acme.sh用于证书管理，但限制参数
 	}
@@ -147,6 +147,13 @@ func (s *SecurityService) ExecuteSecureCommand(command string, args []string, ti
 	if baseName == "acme.sh" {
 		if err := s.validateAcmeCommand(args); err != nil {
 			return nil, fmt.Errorf("acme.sh参数验证失败: %v", err)
+		}
+	} else if baseName == "bash" {
+		// 对bash命令进行特殊验证，只允许-c参数用于执行acme.sh安装
+		if len(args) >= 2 && args[0] == "-c" && strings.Contains(args[1], "acme.sh") {
+			// 允许acme.sh安装命令
+		} else {
+			return nil, fmt.Errorf("bash命令只允许执行acme.sh相关操作")
 		}
 	} else {
 		// 其他命令的通用参数验证

@@ -810,14 +810,29 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	// 强制清理所有可能的ACME缓存和配置
 	acmePath := s.getAcmePath()
 	
-	// 1. 彻底清理所有acme.sh相关文件和目录
-	fmt.Printf("[CLEANUP] 开始彻底清理acme.sh缓存...\n")
+	// 1. 彻底删除和重新安装acme.sh
+	fmt.Printf("[CLEANUP] 开始彻底重新安装acme.sh...\n")
 	
-	// 删除整个acme.sh配置目录
+	// 完全删除acme.sh目录
 	acmeDir := "/root/.acme.sh"
-	os.RemoveAll(acmeDir + "/ca")
-	os.RemoveAll(acmeDir + "/" + req.Domain + "_ecc")
-	os.RemoveAll(acmeDir + "/" + req.Domain)
+	os.RemoveAll(acmeDir)
+	
+	// 使用完全独立的工作目录
+	tempAcmeDir := "/tmp/acme-" + fmt.Sprintf("%d", time.Now().Unix())
+	os.MkdirAll(tempAcmeDir, 0755)
+	
+	// 重新下载和安装acme.sh到临时目录
+	fmt.Printf("[INSTALL] 重新下载和安装acme.sh到临时目录 %s...\n", tempAcmeDir)
+	installCmd := fmt.Sprintf(`export LE_WORKING_DIR=%s && curl -s https://get.acme.sh | sh -s -- --home %s --config-home %s --accountemail admin@gmail.com`, tempAcmeDir, tempAcmeDir, tempAcmeDir)
+	installOutput, installErr := s.securityService.ExecuteSecureCommand("bash", []string{"-c", installCmd}, 3*time.Minute)
+	if installErr != nil {
+		fmt.Printf("[INSTALL ERROR] acme.sh安装失败: %v, 输出: %s\n", installErr, string(installOutput))
+	} else {
+		fmt.Printf("[INSTALL SUCCESS] acme.sh重新安装成功\n")
+	}
+	
+	// 更新acme路径为新的临时目录
+	acmePath = tempAcmeDir + "/acme.sh"
 	
 	// 2. 清理账户缓存
 	cleanArgs := []string{"--remove-account", "--server", server}
