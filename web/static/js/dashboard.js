@@ -880,31 +880,38 @@ async function issueCertificate(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
-    
-    // 根据证书类型调整域名
+
+    // 根据证书类型调整域名和验证方法
     if (data.cert_type === 'mail') {
         data.domain = 'mail.' + data.domain;
+        // 邮件证书目前只支持DNS验证
+        data.validation_method = 'dns';
+
+        // 提示用户邮件证书需要DNS验证
+        if (data.validation_method !== 'dns') {
+            showModal('验证方式提示', '邮件证书（mail.*）目前只支持DNS验证方式，已自动切换为DNS验证。', 'info');
+        }
     } else if (data.cert_type === 'wildcard') {
         data.domain = '*.' + data.domain;
         data.validation_method = 'dns'; // 通配符证书强制使用DNS验证
     }
-    
+
     const submitBtn = document.getElementById('issue-cert-submit');
     const originalText = submitBtn.innerHTML;
     submitBtn.disabled = true;
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>处理中...';
-    
+
     try {
         const response = await fetch('/api/v1/certificates/issue', {
             method: 'POST',
             headers: getAuthHeaders(),
             body: JSON.stringify(data)
         });
-        
+
         const result = await response.json();
-        
+
         if (response.ok) {
-            if (data.validation_method === 'dns') {
+            if (data.validation_method === 'dns' || result.dns_name) {
                 // 显示DNS验证信息
                 showDNSValidation(result.dns_name, result.dns_value);
             } else {
