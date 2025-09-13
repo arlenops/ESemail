@@ -407,21 +407,28 @@ func (ws *WorkflowService) validateUserManagement() error {
 
 // validateMailService 验证邮件服务
 func (ws *WorkflowService) validateMailService() error {
-	if ws.mailServer == nil {
-		return fmt.Errorf("邮件服务未初始化")
-	}
-	
-	if !ws.mailServer.IsRunning() {
-		return fmt.Errorf("邮件服务未运行")
-	}
-	
-	// 检查DKIM配置
-	_, err := ws.mailServer.GetDKIMPublicKey()
-	if err != nil {
-		return fmt.Errorf("DKIM配置无效: %v", err)
-	}
-	
-	return nil
+    // 优先使用系统级 Postfix/Dovecot 服务状态作为判定依据
+    if ws.systemService == nil {
+        return fmt.Errorf("系统服务未初始化")
+    }
+
+    status := ws.systemService.GetInitializationStatus()
+    services, ok := status["services"].(map[string]string)
+    if !ok {
+        return fmt.Errorf("无法获取系统服务状态")
+    }
+
+    postfix := services["postfix"]
+    dovecot := services["dovecot"]
+    opendkim := services["opendkim"]
+
+    isActive := func(s string) bool { return s == "active" || s == "running" }
+
+    if !isActive(postfix) || !isActive(dovecot) || !isActive(opendkim) {
+        return fmt.Errorf("邮件相关服务未全部就绪 (postfix=%s, dovecot=%s, opendkim=%s)", postfix, dovecot, opendkim)
+    }
+
+    return nil
 }
 
 // unlockStepFeatures 解锁步骤相关功能

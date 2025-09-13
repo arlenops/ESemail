@@ -120,25 +120,19 @@ export DP_Key="your_dnspod_api_key"
 ## 🚀 使用示例
 
 ### HTTP验证申请证书
-通过ESemail管理界面或API：
+通过ESemail管理界面或API（邮箱从配置注入，不需在请求中提供）：
 ```http
-POST /api/v1/certificates
+POST /api/v1/certificates/issue
 {
-  "domain": "mail.yourdomain.com",
-  "cert_type": "mail",
-  "validation_method": "http",
-  "email": "admin@yourdomain.com"
+  "domain": "mail.yourdomain.com"
 }
 ```
 
 ### DNS验证申请证书
 ```http
-POST /api/v1/certificates
+POST /api/v1/certificates/issue
 {
-  "domain": "*.yourdomain.com",
-  "cert_type": "wildcard",
-  "validation_method": "dns",
-  "email": "admin@yourdomain.com"
+  "domain": "*.yourdomain.com"
 }
 ```
 
@@ -199,16 +193,10 @@ dig TXT _acme-challenge.yourdomain.com +short
 #### 5. 邮箱验证失败
 ```bash
 # 错误: "contact email has invalid domain"
-# 解决方案1: 在config.yaml中配置有效邮箱
+# 解决方案: 在config.yaml中配置有效邮箱（证书邮箱不再从API传入）
 cert:
   email: "admin@yourdomain.com"  # 使用您的真实域名
-
-# 解决方案2: API调用时指定邮箱
-curl -X POST http://localhost:8686/api/v1/certificates/issue \
-  -H "Content-Type: application/json" \
-  -d '{"domain": "mail.yourdomain.com", "email": "admin@yourdomain.com"}'
-
-# 解决方案3: 使用公共邮箱（不推荐但可用）
+# 或使用公共邮箱（不推荐但可用）
 cert:
   email: "admin@gmail.com"
 ```

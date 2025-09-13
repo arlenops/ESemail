@@ -9,7 +9,7 @@ import (
 )
 
 type CertHandler struct {
-	certService *service.CertService
+    certService *service.CertService
 }
 
 func NewCertHandler(certService *service.CertService) *CertHandler {
@@ -28,22 +28,21 @@ func (h *CertHandler) ListCertificates(c *gin.Context) {
 }
 
 func (h *CertHandler) IssueCertificate(c *gin.Context) {
-	var req struct {
-		Domain string `json:"domain" binding:"required"`
-		Email  string `json:"email" binding:"required,email"`
-	}
+    var req struct {
+        Domain string `json:"domain" binding:"required"`
+    }
 
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
 
-	// 只使用DNS验证方式
-	result, err := h.certService.IssueDNSCert(req.Domain, req.Email)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+    // 只使用DNS验证方式，邮箱统一从配置注入
+    result, err := h.certService.IssueDNSCert(req.Domain)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
 	if result.Success && result.DNSName != "" {
 		// DNS挑战需要用户操作

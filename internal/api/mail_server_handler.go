@@ -10,7 +10,7 @@ import (
 )
 
 type MailServerHandler struct {
-	mailServer *service.MailServer
+    mailServer *service.MailServer
 }
 
 func NewMailServerHandler(mailServer *service.MailServer) *MailServerHandler {
@@ -86,12 +86,12 @@ func (h *MailServerHandler) SendEmail(c *gin.Context) {
 
 // GetMailHistory 获取邮件历史
 func (h *MailServerHandler) GetMailHistory(c *gin.Context) {
-	query := service.MailHistoryQuery{
-		StartDate: time.Now().AddDate(0, 0, -30),
-		EndDate:   time.Now(),
-		Page:      1,
-		PageSize:  50,
-	}
+    query := service.MailHistoryQuery{
+        StartDate: time.Now().AddDate(0, 0, -30),
+        EndDate:   time.Now(),
+        Page:      1,
+        PageSize:  50,
+    }
 
 	if startDate := c.Query("start_date"); startDate != "" {
 		if parsed, err := time.Parse("2006-01-02", startDate); err == nil {
@@ -121,16 +121,16 @@ func (h *MailServerHandler) GetMailHistory(c *gin.Context) {
 	query.User = c.Query("user")
 	query.Status = c.Query("status")
 
-	// 使用邮件服务器的增强邮件服务
-	mailService := &service.EnhancedMailService{}
-	history, err := mailService.GetMailHistory(query)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "获取邮件历史失败: " + err.Error(),
-		})
-		return
-	}
+    // 优先使用系统级 Postfix 日志解析
+    mailService := service.NewMailService()
+    history, err := mailService.GetMailHistory(query)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "success": false,
+            "error":   "获取邮件历史失败: " + err.Error(),
+        })
+        return
+    }
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -140,64 +140,54 @@ func (h *MailServerHandler) GetMailHistory(c *gin.Context) {
 
 // GetMailDetail 获取邮件详情
 func (h *MailServerHandler) GetMailDetail(c *gin.Context) {
-	messageID := c.Param("id")
-	if messageID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "邮件ID不能为空",
-		})
-		return
-	}
+    messageID := c.Param("id")
+    if messageID == "" {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "success": false,
+            "error":   "邮件ID不能为空",
+        })
+        return
+    }
+    // 使用系统级日志与EML解析
+    mailService := service.NewMailService()
+    record, err := mailService.GetMailDetail(messageID)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{
+            "success": false,
+            "error":   "邮件不存在或无法解析: " + err.Error(),
+        })
+        return
+    }
 
-	message, err := h.mailServer.GetUserMessages("", "INBOX", 1, 0)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "获取邮件详情失败: " + err.Error(),
-		})
-		return
-	}
-
-	// 简化实现：查找指定ID的邮件
-	var foundMessage *service.MailMessage
-	for _, msg := range message {
-		if msg.ID == messageID {
-			foundMessage = msg
-			break
-		}
-	}
-
-	if foundMessage == nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"success": false,
-			"error":   "邮件不存在",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"data":    foundMessage,
-	})
+    c.JSON(http.StatusOK, gin.H{
+        "success": true,
+        "data":    record,
+    })
 }
 
 // DownloadEML 下载EML文件
 func (h *MailServerHandler) DownloadEML(c *gin.Context) {
-	messageID := c.Param("id")
-	if messageID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "邮件ID不能为空",
-		})
-		return
-	}
+    messageID := c.Param("id")
+    if messageID == "" {
+        c.JSON(http.StatusBadRequest, gin.H{
+            "success": false,
+            "error":   "邮件ID不能为空",
+        })
+        return
+    }
+    mailService := service.NewMailService()
+    data, filename, err := mailService.DownloadEML(messageID)
+    if err != nil {
+        c.JSON(http.StatusNotFound, gin.H{
+            "success": false,
+            "error":   "无法获取EML: " + err.Error(),
+        })
+        return
+    }
 
-	// 这里需要实现从邮件存储中获取EML内容
-	emlData := []byte("From: test@example.com\r\nTo: user@example.com\r\nSubject: Test Email\r\n\r\nThis is a test email.")
-
-	c.Header("Content-Type", "message/rfc822")
-	c.Header("Content-Disposition", "attachment; filename=\""+messageID+".eml\"")
-	c.Data(http.StatusOK, "message/rfc822", emlData)
+    c.Header("Content-Type", "message/rfc822")
+    c.Header("Content-Disposition", "attachment; filename=\""+filename+"\"")
+    c.Data(http.StatusOK, "message/rfc822", data)
 }
 
 // GetUserMessages 获取用户邮件

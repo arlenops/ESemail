@@ -968,17 +968,19 @@ async function continueValidation() {
     const originalText = continueBtn.innerHTML;
     continueBtn.disabled = true;
     continueBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>验证中...';
-    
+
     const resultDiv = document.getElementById('dns-validation-result');
-    
+
     try {
-        const response = await fetch('/api/v1/certificates/validate-dns', {
+        // 获取当前域名
+        const domain = getCurrentDomain();
+        if (!domain) {
+            throw new Error('无法获取域名信息');
+        }
+
+        const response = await fetch(`/api/v1/certificates/validate-dns/${domain}`, {
             method: 'POST',
-            headers: getAuthHeaders(),
-            body: JSON.stringify({
-                dns_name: document.getElementById('dns-record-name').value,
-                dns_value: document.getElementById('dns-record-value').value
-            })
+            headers: getAuthHeaders()
         });
         
         const result = await response.json();
