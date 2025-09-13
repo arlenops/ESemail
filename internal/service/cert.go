@@ -20,6 +20,7 @@ import (
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
+	"github.com/miekg/dns"
 )
 
 // CertService 使用Lego ACME客户端的证书服务
@@ -409,10 +410,74 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 
 // verifyDNSRecord 验证DNS记录
 func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) bool {
-	// 这里应该实现真实的DNS查询验证
-	// 为了简化，这里返回true，实际项目中需要使用DNS查询库
-	log.Printf("INFO: 验证DNS记录 %s = %s", dnsName, expectedValue)
-	return true
+    // 生产级 DNS TXT 验证：多解析器 + 重试 + 规范化比较
+    name := dns.Fqdn(strings.TrimSpace(dnsName))
+    expected := strings.TrimSpace(expectedValue)
+    if name == "." || expected == "" {
+        return false
+    }
+
+    // 解析器列表（可通过环境变量 DNS_RESOLVERS 覆盖，逗号分隔）
+    resolvers := []string{"1.1.1.1:53", "8.8.8.8:53", "8.8.4.4:53"}
+    if env := os.Getenv("DNS_RESOLVERS"); env != "" {
+        var custom []string
+        for _, p := range strings.Split(env, ",") {
+            p = strings.TrimSpace(p)
+            if p == "" { continue }
+            if !strings.Contains(p, ":") { p = p + ":53" }
+            custom = append(custom, p)
+        }
+        if len(custom) > 0 { resolvers = custom }
+    }
+
+    attempts := 6
+    delay := 5 * time.Second
+
+    for i := 0; i < attempts; i++ {
+        for _, server := range resolvers {
+            txts, err := queryTXTOnce(server, name, 4*time.Second)
+            if err != nil {
+                continue
+            }
+            for _, txt := range txts {
+                v := strings.TrimSpace(strings.Trim(txt, `"`))
+                if v == expected || strings.Contains(v, expected) {
+                    log.Printf("INFO: DNS验证通过 %s = %s @ %s", name, v, server)
+                    return true
+                }
+            }
+        }
+        if i < attempts-1 {
+            time.Sleep(delay)
+        }
+    }
+    log.Printf("WARNING: DNS验证失败 %s 未匹配到期望值", name)
+    return false
+}
+
+func queryTXTOnce(server, fqdn string, timeout time.Duration) ([]string, error) {
+    m := new(dns.Msg)
+    m.SetQuestion(fqdn, dns.TypeTXT)
+    c := new(dns.Client)
+    c.Timeout = timeout
+    in, _, err := c.Exchange(m, server)
+    if err != nil {
+        return nil, err
+    }
+    if in.Rcode != dns.RcodeSuccess {
+        return nil, fmt.Errorf("dns rcode: %d", in.Rcode)
+    }
+    var out []string
+    for _, ans := range in.Answer {
+        if t, ok := ans.(*dns.TXT); ok {
+            // 合并片段
+            out = append(out, strings.Join(t.Txt, ""))
+        }
+    }
+    if len(out) == 0 {
+        return nil, fmt.Errorf("no TXT records")
+    }
+    return out, nil
 }
 
 // installCertificate 安装证书
