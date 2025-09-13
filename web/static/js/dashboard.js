@@ -33,8 +33,13 @@ function initializeEventListeners() {
     document.querySelectorAll('.nav-link').forEach(link => {
         link.addEventListener('click', function(e) {
             e.preventDefault();
-            const section = this.getAttribute('href').replace('#', '');
-            switchSection(section);
+            const href = this.getAttribute('href');
+            // 检查是否是有效的section链接（以#开头且不是javascript:void(0)）
+            if (href && href.startsWith('#') && href !== '#') {
+                const section = href.replace('#', '');
+                switchSection(section);
+            }
+            // 如果是disabled状态的链接，不做任何处理（已经有onclick处理器）
         });
     });
 

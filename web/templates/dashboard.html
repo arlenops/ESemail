@@ -112,8 +112,8 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.domain_config}}disabled{{end}}" 
-                               href="{{if .unlock_status.domain_config}}#domains{{else}}javascript:void(0){{end}}" 
+                            <a class="nav-link {{if not .unlock_status.domain_config}}disabled{{end}}"
+                               href="{{if .unlock_status.domain_config}}#domains{{else}}javascript:void(0){{end}}"
                                data-section="{{if .unlock_status.domain_config}}domains{{else}}locked{{end}}"
                                {{if not .unlock_status.domain_config}}onclick="showLockMessage('域名管理', '系统初始化')"{{end}}>
                                 <i class="fas fa-globe"></i>
@@ -122,8 +122,18 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.user_mgmt}}disabled{{end}}" 
-                               href="{{if .unlock_status.user_mgmt}}#users{{else}}javascript:void(0){{end}}" 
+                            <a class="nav-link {{if not .unlock_status.ssl_config}}disabled{{end}}"
+                               href="{{if .unlock_status.ssl_config}}#certificates{{else}}javascript:void(0){{end}}"
+                               data-section="{{if .unlock_status.ssl_config}}certificates{{else}}locked{{end}}"
+                               {{if not .unlock_status.ssl_config}}onclick="showLockMessage('证书管理', 'DNS验证')"{{end}}>
+                                <i class="fas fa-shield-alt"></i>
+                                证书管理
+                                {{if not .unlock_status.ssl_config}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {{if not .unlock_status.user_mgmt}}disabled{{end}}"
+                               href="{{if .unlock_status.user_mgmt}}#users{{else}}javascript:void(0){{end}}"
                                data-section="{{if .unlock_status.user_mgmt}}users{{else}}locked{{end}}"
                                {{if not .unlock_status.user_mgmt}}onclick="showLockMessage('用户管理', 'SSL证书配置')"{{end}}>
                                 <i class="fas fa-users"></i>
@@ -132,23 +142,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.mail_service}}disabled{{end}}" 
-                               href="{{if .unlock_status.mail_service}}#mail{{else}}javascript:void(0){{end}}" 
+                            <a class="nav-link {{if not .unlock_status.mail_service}}disabled{{end}}"
+                               href="{{if .unlock_status.mail_service}}#mail{{else}}javascript:void(0){{end}}"
                                data-section="{{if .unlock_status.mail_service}}mail{{else}}locked{{end}}"
                                {{if not .unlock_status.mail_service}}onclick="showLockMessage('邮件服务', '用户管理')"{{end}}>
                                 <i class="fas fa-envelope"></i>
                                 邮件历史
                                 {{if not .unlock_status.mail_service}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.ssl_config}}disabled{{end}}" 
-                               href="{{if .unlock_status.ssl_config}}#certificates{{else}}javascript:void(0){{end}}" 
-                               data-section="{{if .unlock_status.ssl_config}}certificates{{else}}locked{{end}}"
-                               {{if not .unlock_status.ssl_config}}onclick="showLockMessage('证书管理', 'DNS验证')"{{end}}>
-                                <i class="fas fa-shield-alt"></i>
-                                证书管理
-                                {{if not .unlock_status.ssl_config}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
                             </a>
                         </li>
                         <li class="nav-item">
