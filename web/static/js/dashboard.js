@@ -2,6 +2,71 @@ let currentSection = 'dashboard';
 let healthData = null;
 let unlockStatus = {}; // 缓存解锁状态
 
+// 通用模态框函数
+function showModal(title, message, type = 'info', actions = []) {
+    // 移除已存在的模态框
+    const existingModal = document.getElementById('universal-modal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const typeConfig = {
+        'success': { icon: 'fas fa-check-circle', headerClass: 'bg-success', iconClass: 'text-success' },
+        'error': { icon: 'fas fa-exclamation-triangle', headerClass: 'bg-danger', iconClass: 'text-danger' },
+        'warning': { icon: 'fas fa-exclamation-triangle', headerClass: 'bg-warning', iconClass: 'text-warning' },
+        'info': { icon: 'fas fa-info-circle', headerClass: 'bg-primary', iconClass: 'text-primary' }
+    };
+
+    const config = typeConfig[type] || typeConfig['info'];
+
+    const modal = document.createElement('div');
+    modal.className = 'modal fade';
+    modal.id = 'universal-modal';
+    modal.setAttribute('tabindex', '-1');
+
+    let actionsHtml = '';
+    if (actions.length > 0) {
+        actions.forEach(action => {
+            actionsHtml += `<button type="button" class="btn ${action.class || 'btn-primary'}" onclick="${action.onclick || ''}" ${action.dismiss ? 'data-bs-dismiss="modal"' : ''}>${action.text}</button>`;
+        });
+    } else {
+        actionsHtml = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>';
+    }
+
+    modal.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header ${config.headerClass} text-white">
+                    <h5 class="modal-title">
+                        <i class="${config.icon} me-2"></i>${title}
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <i class="${config.icon} ${config.iconClass} fa-3x mb-3"></i>
+                    </div>
+                    <div class="text-center">${message}</div>
+                </div>
+                <div class="modal-footer">
+                    ${actionsHtml}
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+    const bootstrapModal = new bootstrap.Modal(modal);
+    bootstrapModal.show();
+
+    // 模态框关闭时清理DOM
+    modal.addEventListener('hidden.bs.modal', () => {
+        document.body.removeChild(modal);
+    });
+
+    return bootstrapModal;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
     // 检查认证状态
     if (!checkAuthToken()) {
@@ -11,12 +76,31 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeEventListeners();
     checkSystemStatus();
     // 初始检查解锁状态
-    checkUnlockStatus();
+    checkUnlockStatus().then(() => {
+        // 初次加载时更新导航
+        updateNavigationUI();
+    });
     // 定期刷新
     setInterval(refreshDashboard, 30000);
     // 定期检查解锁状态
     setInterval(checkUnlockStatus, 10000);
 });
+
+// 强制更新解锁状态（用于重要操作后立即更新）
+async function forceUpdateUnlockStatus() {
+    try {
+        const response = await fetch('/api/v1/workflow/unlock-status');
+        const data = await response.json();
+
+        if (data.success) {
+            unlockStatus = data.unlock_status;
+            updateNavigationUI();
+            console.log('功能解锁状态已强制更新:', unlockStatus);
+        }
+    } catch (error) {
+        console.error('强制检查解锁状态失败:', error);
+    }
+}
 
 // 检查认证令牌
 function checkAuthToken() {
@@ -30,18 +114,7 @@ function checkAuthToken() {
 }
 
 function initializeEventListeners() {
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.addEventListener('click', function(e) {
-            e.preventDefault();
-            const href = this.getAttribute('href');
-            // 检查是否是有效的section链接（以#开头且不是javascript:void(0)）
-            if (href && href.startsWith('#') && href !== '#') {
-                const section = href.replace('#', '');
-                switchSection(section);
-            }
-            // 如果是disabled状态的链接，不做任何处理（已经有onclick处理器）
-        });
-    });
+    // 不在这里添加导航事件监听器，改为在updateNavigationUI中统一处理
 
     document.getElementById('init-system-btn').addEventListener('click', initializeSystem);
     document.getElementById('add-domain-form').addEventListener('submit', addDomain);
@@ -140,104 +213,96 @@ function updateNavigationUI() {
     navLinks.forEach(link => {
         const section = link.getAttribute('data-section');
 
-        // 移除现有状态
-        link.classList.remove('disabled');
-        link.style.pointerEvents = '';
-        link.style.opacity = '';
-
-        // 移除旧的点击事件
+        // 移除所有事件监听器
         const newLink = link.cloneNode(true);
         link.parentNode.replaceChild(newLink, link);
+
+        // 重置样式和属性
+        newLink.classList.remove('disabled');
+        newLink.style.pointerEvents = '';
+        newLink.style.opacity = '';
+
+        // 移除锁定图标
+        const lockIcon = newLink.querySelector('.fa-lock');
+        if (lockIcon) {
+            lockIcon.remove();
+        }
 
         // 根据解锁状态更新
         switch(section) {
             case 'domains':
-                if (!unlockStatus.domain_config) {
-                    newLink.classList.add('disabled');
-                    newLink.href = 'javascript:void(0)';
-                    newLink.onclick = () => showLockMessage('域名管理', '系统初始化');
-                } else {
-                    newLink.href = '#domains';
-                    newLink.onclick = (e) => { e.preventDefault(); switchSection('domains'); };
-                }
+                updateSingleNavigation(newLink, 'domains', unlockStatus.domain_config, '域名管理', '系统初始化');
                 break;
-
             case 'certificates':
-                if (!unlockStatus.ssl_config) {
-                    newLink.classList.add('disabled');
-                    newLink.href = 'javascript:void(0)';
-                    newLink.onclick = () => showLockMessage('证书管理', '域名配置');
-                } else {
-                    newLink.href = '#certificates';
-                    newLink.onclick = (e) => { e.preventDefault(); switchSection('certificates'); };
-                }
+                updateSingleNavigation(newLink, 'certificates', unlockStatus.ssl_config, '证书管理', '域名配置');
                 break;
-
             case 'users':
-                if (!unlockStatus.user_mgmt) {
-                    newLink.classList.add('disabled');
-                    newLink.href = 'javascript:void(0)';
-                    newLink.onclick = () => showLockMessage('用户管理', '域名配置');
-                } else {
-                    newLink.href = '#users';
-                    newLink.onclick = (e) => { e.preventDefault(); switchSection('users'); };
-                }
+                updateSingleNavigation(newLink, 'users', unlockStatus.user_mgmt, '用户管理', '域名配置');
                 break;
-
             case 'mail':
-                if (!unlockStatus.mail_service) {
-                    newLink.classList.add('disabled');
-                    newLink.href = 'javascript:void(0)';
-                    newLink.onclick = () => showLockMessage('邮件服务', '用户管理和SSL证书配置');
-                } else {
-                    newLink.href = '#mail';
-                    newLink.onclick = (e) => { e.preventDefault(); switchSection('mail'); };
-                }
+                updateSingleNavigation(newLink, 'mail', unlockStatus.mail_service, '邮件服务', '用户管理和SSL证书配置');
                 break;
-
             default:
-                // 其他链接保持原有行为
-                if (newLink.getAttribute('href').startsWith('#')) {
-                    newLink.onclick = (e) => { e.preventDefault(); switchSection(section); };
+                // 对于其他导航项（如dashboard、system）保持可用
+                if (section === 'dashboard' || section === 'system') {
+                    newLink.href = '#' + section;
+                    newLink.onclick = (e) => {
+                        e.preventDefault();
+                        switchSection(section);
+                    };
                 }
         }
     });
 }
 
+// 更新单个导航项
+function updateSingleNavigation(linkElement, section, isUnlocked, featureName, requiredStep) {
+    if (!isUnlocked) {
+        // 功能未解锁
+        linkElement.classList.add('disabled');
+        linkElement.href = 'javascript:void(0)';
+        linkElement.onclick = (e) => {
+            e.preventDefault();
+            showLockMessage(featureName, requiredStep);
+        };
+
+        // 添加锁定图标
+        const lockIcon = document.createElement('i');
+        lockIcon.className = 'fas fa-lock ms-1 text-muted';
+        linkElement.appendChild(lockIcon);
+    } else {
+        // 功能已解锁
+        linkElement.classList.remove('disabled');
+        linkElement.href = '#' + section;
+        linkElement.onclick = (e) => {
+            e.preventDefault();
+            switchSection(section);
+        };
+    }
+}
+
 // 显示功能锁定提示
 function showLockMessage(feature, requiredStep) {
-    // 创建现代化的提示模态框，而不是使用alert
-    const modal = document.createElement('div');
-    modal.className = 'modal fade';
-    modal.innerHTML = `
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header bg-warning text-white">
-                    <h5 class="modal-title">
-                        <i class="fas fa-lock me-2"></i>功能未解锁
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body text-center">
-                    <i class="fas fa-exclamation-triangle text-warning fa-3x mb-3"></i>
-                    <h5>${feature} 功能尚未解锁</h5>
-                    <p class="text-muted">请先完成：<strong>${requiredStep}</strong></p>
-                    <a href="/workflow" class="btn btn-primary mt-2">
-                        <i class="fas fa-arrow-right me-2"></i>前往工作流向导
-                    </a>
-                </div>
-            </div>
-        </div>
-    `;
+    const actions = [
+        {
+            text: '<i class="fas fa-arrow-right me-2"></i>前往工作流向导',
+            class: 'btn-primary',
+            onclick: 'window.location.href="/workflow"',
+            dismiss: true
+        },
+        {
+            text: '关闭',
+            class: 'btn-secondary',
+            dismiss: true
+        }
+    ];
 
-    document.body.appendChild(modal);
-    const bootstrapModal = new bootstrap.Modal(modal);
-    bootstrapModal.show();
-
-    // 模态框关闭时清理DOM
-    modal.addEventListener('hidden.bs.modal', () => {
-        document.body.removeChild(modal);
-    });
+    showModal(
+        '功能未解锁',
+        `<h5>${feature} 功能尚未解锁</h5><p class="text-muted">请先完成：<strong>${requiredStep}</strong></p>`,
+        'warning',
+        actions
+    );
 }
 
 async function initializeSystem() {
@@ -270,12 +335,13 @@ async function initializeSystem() {
         if (result.success) {
             // 系统初始化成功后立即检查解锁状态
             setTimeout(async () => {
-                await checkUnlockStatus();
-                location.reload();
+                await forceUpdateUnlockStatus();
+                showModal('系统初始化完成', '系统已成功初始化，现在可以开始配置域名和其他功能。', 'success');
             }, 2000);
         } else {
             btn.disabled = false;
             btn.textContent = '重试初始化';
+            showModal('初始化失败', '系统初始化失败，请检查日志并重试。', 'error');
         }
     } catch (error) {
         console.error('初始化失败:', error);
@@ -706,7 +772,7 @@ async function addDomain(e) {
             // 清空表单
             document.getElementById('add-domain-form').reset();
             // 立即检查解锁状态
-            await checkUnlockStatus();
+            await forceUpdateUnlockStatus();
             // 重新加载域名列表
             loadDomains();
             // 显示DNS设置引导
@@ -715,11 +781,11 @@ async function addDomain(e) {
             }, 500);
         } else {
             const error = await response.json();
-            alert('添加失败: ' + error.error);
+            showModal('添加失败', error.error || '域名添加失败，请重试', 'error');
             console.error('添加域名失败:', error);
         }
     } catch (error) {
-        alert('添加失败: ' + error.message);
+        showModal('添加失败', error.message || '网络错误，请重试', 'error');
         console.error('添加域名错误:', error);
     }
 }
@@ -734,7 +800,7 @@ async function addUser(e) {
         data.email = data.email_local + '@' + data.domain;
         delete data.email_local;
     } else {
-        alert('请选择域名和填写用户名');
+        showModal('选择错误', '请选择域名和填写用户名', 'warning');
         return;
     }
     
@@ -756,9 +822,9 @@ async function addUser(e) {
         const result = await response.json();
         
         if (response.ok) {
-            alert('用户创建成功');
+            showModal('创建成功', '用户创建成功', 'success');
             bootstrap.Modal.getInstance(document.getElementById('add-user-modal')).hide();
-            // 重置表单  
+            // 重置表单
             document.getElementById('add-user-form').reset();
             // 刷新用户列表
             loadUsers();
@@ -766,11 +832,11 @@ async function addUser(e) {
             loadUserEmailOptions();
         } else {
             // 显示服务器返回的错误信息
-            alert('创建失败: ' + (result.error || '未知错误'));
+            showModal('创建失败', result.error || '未知错误', 'error');
         }
     } catch (error) {
         console.error('创建用户请求失败:', error);
-        alert('创建失败: 网络错误或服务器无响应');
+        showModal('创建失败', '网络错误或服务器无响应', 'error');
     } finally {
         // 恢复提交按钮状态
         submitButton.disabled = false;
@@ -811,16 +877,16 @@ async function issueCertificate(e) {
                 showDNSValidation(result.dns_name, result.dns_value);
             } else {
                 // HTTP验证直接完成
-                alert('证书申请成功');
+                showModal('申请成功', '证书申请成功', 'success');
                 bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
                 loadCertificates();
             }
         } else {
-            alert('申请失败: ' + result.error);
+            showModal('申请失败', result.error || '证书申请失败', 'error');
         }
     } catch (error) {
         console.error('申请证书失败:', error);
-        alert('网络错误，请重试');
+        showModal('网络错误', '网络错误，请重试', 'error');
     } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
@@ -860,7 +926,7 @@ function copyToClipboard(elementId) {
         }, 2000);
     } catch (err) {
         console.error('复制失败:', err);
-        alert('复制失败，请手动选择并复制');
+        showModal('复制失败', '复制失败，请手动选择并复制', 'warning');
     }
 }
 
@@ -898,7 +964,7 @@ async function continueValidation() {
             setTimeout(() => {
                 bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
                 loadCertificates();
-                alert('证书申请成功！');
+                showModal('申请成功', '证书申请成功！', 'success');
             }, 3000);
         } else {
             resultDiv.innerHTML = `
@@ -941,19 +1007,19 @@ function backToForm() {
 
 async function renewCertificates() {
     try {
-        const response = await fetch('/api/v1/certificates/renew', { 
+        const response = await fetch('/api/v1/certificates/renew', {
             method: 'POST',
             headers: getAuthHeaders()
         });
         if (response.ok) {
-            alert('证书续签成功');
+            showModal('续签成功', '证书续签成功', 'success');
             loadCertificates();
         } else {
             const error = await response.json();
-            alert('续签失败: ' + error.error);
+            showModal('续签失败', error.error || '证书续签失败', 'error');
         }
     } catch (error) {
-        alert('续签失败: ' + error.message);
+        showModal('续签失败', error.message || '网络错误', 'error');
     }
 }
 
@@ -1099,6 +1165,6 @@ async function showDNSSetupGuide(domain) {
     } catch (error) {
         console.error('获取DNS设置引导失败:', error);
         // 如果获取失败，至少显示一个成功提示
-        alert(`域名 ${domain} 添加成功！请在域名管理页面查看DNS配置要求。`);
+        showModal('域名添加成功', `域名 ${domain} 添加成功！请在域名管理页面查看DNS配置要求。`, 'success');
     }
 }
