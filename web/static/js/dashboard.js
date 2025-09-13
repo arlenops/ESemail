@@ -123,17 +123,34 @@ function initializeEventListeners() {
 }
 
 function switchSection(section) {
+    console.log('Switching to section:', section);
+
+    // 移除所有导航链接的active状态
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    
-    document.querySelector(`[href="#${section}"]`).classList.add('active');
 
+    // 添加active状态到当前section的导航链接
+    const activeLink = document.querySelector(`[data-section="${section}"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
+    } else {
+        console.warn('找不到对应的导航链接:', section);
+    }
+
+    // 隐藏所有内容区域
     document.querySelectorAll('[id$="-content"]').forEach(content => {
         content.classList.add('d-none');
     });
 
-    document.getElementById(`${section}-content`).classList.remove('d-none');
+    // 显示当前section的内容区域
+    const contentElement = document.getElementById(`${section}-content`);
+    if (contentElement) {
+        contentElement.classList.remove('d-none');
+    } else {
+        console.warn('找不到对应的内容区域:', `${section}-content`);
+    }
+
     currentSection = section;
 
     switch(section) {
@@ -211,7 +228,7 @@ function updateNavigationUI() {
     const navLinks = document.querySelectorAll('.sidebar .nav-link');
 
     navLinks.forEach(link => {
-        const section = link.getAttribute('data-section');
+        const originalSection = link.getAttribute('data-section');
 
         // 移除所有事件监听器
         const newLink = link.cloneNode(true);
@@ -228,27 +245,42 @@ function updateNavigationUI() {
             lockIcon.remove();
         }
 
+        // 确定实际的section名称（去除locked状态）
+        let actualSection = originalSection;
+        if (originalSection === 'locked') {
+            // 根据链接内容判断实际section
+            const linkText = newLink.textContent.trim();
+            if (linkText.includes('域名管理')) actualSection = 'domains';
+            else if (linkText.includes('证书管理')) actualSection = 'certificates';
+            else if (linkText.includes('用户管理')) actualSection = 'users';
+            else if (linkText.includes('邮件历史')) actualSection = 'mail';
+        }
+
         // 根据解锁状态更新
-        switch(section) {
+        switch(actualSection) {
             case 'domains':
                 updateSingleNavigation(newLink, 'domains', unlockStatus.domain_config, '域名管理', '系统初始化');
+                newLink.setAttribute('data-section', unlockStatus.domain_config ? 'domains' : 'locked');
                 break;
             case 'certificates':
                 updateSingleNavigation(newLink, 'certificates', unlockStatus.ssl_config, '证书管理', '域名配置');
+                newLink.setAttribute('data-section', unlockStatus.ssl_config ? 'certificates' : 'locked');
                 break;
             case 'users':
                 updateSingleNavigation(newLink, 'users', unlockStatus.user_mgmt, '用户管理', '域名配置');
+                newLink.setAttribute('data-section', unlockStatus.user_mgmt ? 'users' : 'locked');
                 break;
             case 'mail':
                 updateSingleNavigation(newLink, 'mail', unlockStatus.mail_service, '邮件服务', '用户管理和SSL证书配置');
+                newLink.setAttribute('data-section', unlockStatus.mail_service ? 'mail' : 'locked');
                 break;
             default:
                 // 对于其他导航项（如dashboard、system）保持可用
-                if (section === 'dashboard' || section === 'system') {
-                    newLink.href = '#' + section;
+                if (actualSection === 'dashboard' || actualSection === 'system') {
+                    newLink.href = '#' + actualSection;
                     newLink.onclick = (e) => {
                         e.preventDefault();
-                        switchSection(section);
+                        switchSection(actualSection);
                     };
                 }
         }
