@@ -11,7 +11,6 @@ import (
 	"esemail/internal/config"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	"github.com/go-acme/lego/v4/challenge/dns01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
-	"github.com/miekg/dns"
 )
 
 // CertService 使用Lego ACME客户端的证书服务
@@ -31,6 +29,7 @@ type CertService struct {
 	user              *LegoUser
 	pendingChallenges map[string]*LegoDNSChallenge
 	pendingFilePath   string
+	security          *SecurityService
 }
 
 // LegoUser 实现lego.User接口
@@ -124,6 +123,7 @@ func NewCertService(config *config.CertConfig) (*CertService, error) {
 		config:            config,
 		pendingChallenges: make(map[string]*LegoDNSChallenge),
 		pendingFilePath:   filepath.Join("./data", "certificates", "pending_challenges.json"),
+		security:          NewSecurityService(),
 	}
 
 	// 预加载历史未完成挑战，支持进程重启后继续
@@ -435,130 +435,44 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 
 // verifyDNSRecord 验证DNS记录
 func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) (bool, map[string]interface{}) {
-    // 允许跳过预校验，直接交给 ACME 验证（适用于受限网络环境）
-    if strings.EqualFold(os.Getenv("CERT_SKIP_PRECHECK"), "true") {
-        return true, map[string]interface{}{
-            "skipped": true,
-            "reason":  "CERT_SKIP_PRECHECK=true",
-        }
-    }
-    // 生产级 DNS TXT 验证：多解析器 + 重试 + 规范化比较
-    name := dns.Fqdn(strings.TrimSpace(dnsName))
+    // 轻量化：仅使用本机Linux命令 dig 进行验证（通过安全执行器）
+    name := strings.TrimSpace(dnsName)
     expected := strings.TrimSpace(expectedValue)
-    if name == "." || expected == "" {
-        return false, map[string]interface{}{"reason": "invalid input", "fqdn": name}
-    }
-
-    // 模式1：使用系统解析器（/etc/resolv.conf），不显式访问公共DNS
-    if strings.EqualFold(os.Getenv("CERT_DNS_MODE"), "system") {
-        attempts := 6
-        delay := 5 * time.Second
-        last := map[string][]string{}
-        for i := 0; i < attempts; i++ {
-            txts, err := net.LookupTXT(strings.TrimSuffix(name, "."))
-            if err == nil && len(txts) > 0 {
-                last["system"] = txts
-                for _, txt := range txts {
-                    v := strings.TrimSpace(strings.Trim(txt, `"`))
-                    if v == expected || strings.Contains(v, expected) {
-                        return true, map[string]interface{}{
-                            "mode": "system",
-                            "attempts": attempts,
-                            "delay_seconds": int(delay / time.Second),
-                            "fqdn": name,
-                            "observed": last,
-                        }
-                    }
-                }
-            }
-            if i < attempts-1 { time.Sleep(delay) }
-        }
-        return false, map[string]interface{}{
-            "mode": "system",
-            "attempts": 6,
-            "delay_seconds": 5,
-            "fqdn": name,
-            "observed": last,
-        }
-    }
-
-    // 模式2：使用显式解析器列表（默认公共DNS，可通过环境变量覆盖）
-    // 解析器列表（可通过环境变量 DNS_RESOLVERS 覆盖，逗号分隔）
-    resolvers := []string{"1.1.1.1:53", "8.8.8.8:53", "8.8.4.4:53"}
-    if env := os.Getenv("DNS_RESOLVERS"); env != "" {
-        var custom []string
-        for _, p := range strings.Split(env, ",") {
-            p = strings.TrimSpace(p)
-            if p == "" { continue }
-            if !strings.Contains(p, ":") { p = p + ":53" }
-            custom = append(custom, p)
-        }
-        if len(custom) > 0 { resolvers = custom }
+    if name == "" || expected == "" {
+        return false, map[string]interface{}{"reason": "invalid input", "name": name}
     }
 
     attempts := 6
     delay := 5 * time.Second
-    last := map[string][]string{}
-
+    var observed []string
     for i := 0; i < attempts; i++ {
-        for _, server := range resolvers {
-            txts, err := queryTXTOnce(server, name, 4*time.Second)
-            if err != nil {
-                continue
+        out, err := s.security.ExecuteSecureCommand("dig", []string{"+short", "TXT", name}, 6*time.Second)
+        if err == nil {
+            lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+            observed = observed[:0]
+            for _, ln := range lines {
+                v := strings.TrimSpace(strings.Trim(ln, "\""))
+                if v != "" { observed = append(observed, v) }
             }
-            if len(txts) > 0 { last[server] = txts }
-            for _, txt := range txts {
-                v := strings.TrimSpace(strings.Trim(txt, `"`))
+            for _, v := range observed {
                 if v == expected || strings.Contains(v, expected) {
-                    log.Printf("INFO: DNS验证通过 %s = %s @ %s", name, v, server)
                     return true, map[string]interface{}{
-                        "resolvers": resolvers,
                         "attempts": attempts,
                         "delay_seconds": int(delay / time.Second),
-                        "fqdn": name,
-                        "server": server,
-                        "observed": last,
+                        "name": name,
+                        "observed": observed,
                     }
                 }
             }
         }
-        if i < attempts-1 {
-            time.Sleep(delay)
-        }
+        if i < attempts-1 { time.Sleep(delay) }
     }
-    log.Printf("WARNING: DNS验证失败 %s 未匹配到期望值", name)
     return false, map[string]interface{}{
-        "resolvers": resolvers,
         "attempts": attempts,
         "delay_seconds": int(delay / time.Second),
-        "fqdn": name,
-        "observed": last,
+        "name": name,
+        "observed": observed,
     }
-}
-
-func queryTXTOnce(server, fqdn string, timeout time.Duration) ([]string, error) {
-    m := new(dns.Msg)
-    m.SetQuestion(fqdn, dns.TypeTXT)
-    c := new(dns.Client)
-    c.Timeout = timeout
-    in, _, err := c.Exchange(m, server)
-    if err != nil {
-        return nil, err
-    }
-    if in.Rcode != dns.RcodeSuccess {
-        return nil, fmt.Errorf("dns rcode: %d", in.Rcode)
-    }
-    var out []string
-    for _, ans := range in.Answer {
-        if t, ok := ans.(*dns.TXT); ok {
-            // 合并片段
-            out = append(out, strings.Join(t.Txt, ""))
-        }
-    }
-    if len(out) == 0 {
-        return nil, fmt.Errorf("no TXT records")
-    }
-    return out, nil
 }
 
 // installCertificate 安装证书
@@ -705,4 +619,26 @@ func (s *CertService) loadPendingChallenges() error {
 		s.pendingChallenges = stored
 	}
 	return nil
+}
+
+// SetEmail 通过API动态设置证书邮箱（移除对配置文件的依赖）
+func (s *CertService) SetEmail(email string) error {
+    email = strings.TrimSpace(email)
+    if email == "" {
+        return fmt.Errorf("邮箱不能为空")
+    }
+    s.config.Email = email
+    // 使客户端在下次申请时重新初始化
+    s.legoClient = nil
+    s.user = nil
+    return nil
+}
+
+// GetSettings 返回当前证书设置（用于前端展示与管理）
+func (s *CertService) GetSettings() map[string]interface{} {
+    return map[string]interface{}{
+        "email":     s.config.Email,
+        "server":    s.config.Server,
+        "cert_path": s.config.CertPath,
+    }
 }

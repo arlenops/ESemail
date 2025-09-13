@@ -143,5 +143,27 @@ func (h *CertHandler) GetDNSChallenge(c *gin.Context) {
 }
 
 func (h *CertHandler) RenewCertificates(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"message": "证书续签功能暂未实现"})
+    c.JSON(http.StatusOK, gin.H{"message": "证书续签功能暂未实现"})
+}
+
+// GetSettings 获取证书服务设置
+func (h *CertHandler) GetSettings(c *gin.Context) {
+    settings := h.certService.GetSettings()
+    c.JSON(http.StatusOK, gin.H{"success": true, "data": settings})
+}
+
+// UpdateSettings 更新证书服务设置（目前支持更新邮箱）
+func (h *CertHandler) UpdateSettings(c *gin.Context) {
+    var req struct {
+        Email string `json:"email" binding:"required,email"`
+    }
+    if err := c.ShouldBindJSON(&req); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+        return
+    }
+    if err := h.certService.SetEmail(req.Email); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"success": true, "message": "设置已更新"})
 }

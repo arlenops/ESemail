@@ -383,16 +383,18 @@ func SetupRouter(
 				mail.GET("/dns-records", mailServerHandler.GetRecommendedDNSRecords)
 			}
 
-			// 证书管理
-			certs := authenticated.Group("/certificates")
-			{
-				certHandler := NewCertHandler(certService)
-				certs.GET("", certHandler.ListCertificates)
-				certs.POST("/issue", certHandler.IssueCertificate)
-				certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
-				certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
-				certs.POST("/renew", certHandler.RenewCertificates)
-			}
+            // 证书管理
+            certs := authenticated.Group("/certificates")
+            {
+                certHandler := NewCertHandler(certService)
+                certs.GET("", certHandler.ListCertificates)
+                certs.POST("/issue", certHandler.IssueCertificate)
+                certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
+                certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
+                certs.POST("/renew", certHandler.RenewCertificates)
+                certs.GET("/settings", certHandler.GetSettings)
+                certs.POST("/settings", certHandler.UpdateSettings)
+            }
 		}
 	}
 
