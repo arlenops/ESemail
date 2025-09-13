@@ -167,3 +167,20 @@ func (h *CertHandler) UpdateSettings(c *gin.Context) {
     }
     c.JSON(http.StatusOK, gin.H{"success": true, "message": "设置已更新"})
 }
+
+// GetPendingChallenges 列出所有挂起的挑战（调试/可视化）
+func (h *CertHandler) GetPendingChallenges(c *gin.Context) {
+    domains := h.certService.GetPendingDomains()
+    list := make([]map[string]interface{}, 0)
+    for _, d := range domains {
+        ch, err := h.certService.GetPendingChallenge(d)
+        if err == nil {
+            list = append(list, map[string]interface{}{
+                "domain": d,
+                "dns_name": ch.DNSName,
+                "created_at": ch.CreatedAt,
+            })
+        }
+    }
+    c.JSON(http.StatusOK, gin.H{"success": true, "data": list})
+}

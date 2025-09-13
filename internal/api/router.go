@@ -62,19 +62,20 @@ func findResourcePath(resourceType string) string {
 }
 
 func SetupRouter(
-	cfg *config.Config,
-	healthService *service.HealthService,
-	systemService *service.SystemService,
-	domainService *service.DomainService,
-	userService *service.UserService,
-	mailServer *service.MailServer,
-	certService *service.CertService,
-	setupService *service.SetupService,
-	authService *service.AuthService,
-	validationService *service.ValidationService,
-	environmentService *service.EnvironmentService,
-	dnsService *service.DNSService,
-	workflowService *service.WorkflowService,
+    cfg *config.Config,
+    healthService *service.HealthService,
+    systemService *service.SystemService,
+    domainService *service.DomainService,
+    userService *service.UserService,
+    mailServer *service.MailServer,
+    certService *service.CertService,
+    setupService *service.SetupService,
+    authService *service.AuthService,
+    validationService *service.ValidationService,
+    environmentService *service.EnvironmentService,
+    dnsService *service.DNSService,
+    workflowService *service.WorkflowService,
+    settingsService *service.AppSettingsService,
 ) *gin.Engine {
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
@@ -383,18 +384,27 @@ func SetupRouter(
 				mail.GET("/dns-records", mailServerHandler.GetRecommendedDNSRecords)
 			}
 
-            // 证书管理
-            certs := authenticated.Group("/certificates")
-            {
-                certHandler := NewCertHandler(certService)
-                certs.GET("", certHandler.ListCertificates)
-                certs.POST("/issue", certHandler.IssueCertificate)
-                certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
-                certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
-                certs.POST("/renew", certHandler.RenewCertificates)
-                certs.GET("/settings", certHandler.GetSettings)
-                certs.POST("/settings", certHandler.UpdateSettings)
-            }
+        // 证书管理
+        certs := authenticated.Group("/certificates")
+        {
+            certHandler := NewCertHandler(certService)
+            certs.GET("", certHandler.ListCertificates)
+            certs.POST("/issue", certHandler.IssueCertificate)
+            certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
+            certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
+            certs.POST("/renew", certHandler.RenewCertificates)
+            certs.GET("/settings", certHandler.GetSettings)
+            certs.POST("/settings", certHandler.UpdateSettings)
+            certs.GET("/pending", certHandler.GetPendingChallenges)
+        }
+
+        // 应用配置（API管理）
+        cfgAPI := authenticated.Group("/config")
+        {
+            confHandler := NewConfigHandler(settingsService, certService)
+            cfgAPI.GET("", confHandler.GetConfig)
+            cfgAPI.POST("", confHandler.UpdateConfig)
+        }
 		}
 	}
 

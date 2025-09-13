@@ -1,43 +1,52 @@
 package main
 
 import (
-	"esemail/internal/api"
-	"esemail/internal/config"
-	"esemail/internal/service"
-	"esemail/internal/storage"
-	"log"
+    "esemail/internal/api"
+    "esemail/internal/config"
+    "esemail/internal/service"
+    "esemail/internal/storage"
+    "log"
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("配置加载失败: %v", err)
-	}
+    cfg, err := config.Load()
+    if err != nil {
+        log.Fatalf("配置加载失败: %v", err)
+    }
 
-	// 初始化存储 - 使用相对路径避免权限问题
-	dataDir := "./data"
-	if cfg.Storage.DataDir != "" {
-		dataDir = cfg.Storage.DataDir
-	}
-	jsonStorage := storage.NewJSONStorage(dataDir)
-	if err := jsonStorage.Initialize(); err != nil {
-		log.Fatalf("存储初始化失败: %v", err)
-	}
+    // 初始化存储 - 使用相对路径避免权限问题
+    dataDir := "./data"
+    if cfg.Storage.DataDir != "" {
+        dataDir = cfg.Storage.DataDir
+    }
+    jsonStorage := storage.NewJSONStorage(dataDir)
+    if err := jsonStorage.Initialize(); err != nil {
+        log.Fatalf("存储初始化失败: %v", err)
+    }
 
-	// 初始化服务
-	validationService := service.NewValidationService()
-	authService := service.NewAuthService()
-	healthService := service.NewHealthService()
-	systemService := service.NewSystemService()
-	domainService := service.NewDomainServiceWithConfig(dataDir)
-	userService := service.NewUserService()
-	certService, err := service.NewCertService(&cfg.Cert)
-	if err != nil {
-		log.Fatalf("证书服务初始化失败: %v", err)
-	}
-	setupService := service.NewSetupService()
-	environmentService := service.NewEnvironmentService()
-	dnsService := service.NewDNSService()
+    // 加载API管理的应用配置，并覆盖关键项（轻量化：不依赖config.yaml）
+    settingsService := service.NewAppSettingsService(dataDir)
+    if settings, err := settingsService.Load(); err == nil && settings != nil {
+        if settings.Mail.Domain != "" { cfg.Mail.Domain = settings.Mail.Domain }
+        if settings.Cert.Email != "" { cfg.Cert.Email = settings.Cert.Email }
+        if settings.Cert.Server != "" { cfg.Cert.Server = settings.Cert.Server }
+        if settings.Cert.CertPath != "" { cfg.Cert.CertPath = settings.Cert.CertPath }
+    }
+
+    // 初始化服务
+    validationService := service.NewValidationService()
+    authService := service.NewAuthService()
+    healthService := service.NewHealthService()
+    systemService := service.NewSystemService()
+    domainService := service.NewDomainServiceWithConfig(dataDir)
+    userService := service.NewUserService()
+    certService, err := service.NewCertService(&cfg.Cert)
+    if err != nil {
+        log.Fatalf("证书服务初始化失败: %v", err)
+    }
+    setupService := service.NewSetupService()
+    environmentService := service.NewEnvironmentService()
+    dnsService := service.NewDNSService()
 	
 	// 初始化工作流服务
 	workflowService := service.NewWorkflowService(dataDir)
@@ -78,21 +87,22 @@ func main() {
 		mailServer,
 	)
 	
-	router := api.SetupRouter(
-		cfg, 
-		healthService, 
-		systemService, 
-		domainService, 
-		userService, 
-		mailServer, 
-		certService, 
-		setupService, 
-		authService,
-		validationService,
-		environmentService,
-		dnsService,
-		workflowService,
-	)
+    router := api.SetupRouter(
+        cfg, 
+        healthService, 
+        systemService, 
+        domainService, 
+        userService, 
+        mailServer, 
+        certService, 
+        setupService, 
+        authService,
+        validationService,
+        environmentService,
+        dnsService,
+        workflowService,
+        settingsService,
+    )
 
 	log.Printf("ESemail 控制面启动在端口 :%s", cfg.Server.Port)
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
