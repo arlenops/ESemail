@@ -90,10 +90,12 @@ func (p *ManualDNSProvider) Present(domain, token, keyAuth string) error {
 
 // CleanUp 实现dns01.ChallengeProvider接口
 func (p *ManualDNSProvider) CleanUp(domain, token, keyAuth string) error {
-	log.Printf("INFO: 清理DNS挑战记录 - 域名: %s", domain)
-	delete(p.service.pendingChallenges, domain)
-	_ = p.service.savePendingChallenges()
-	return nil
+    log.Printf("INFO: 清理DNS挑战记录 - 域名: %s", domain)
+    // 轻量化手动模式：保留挂起挑战，等待客户端调用验证接口后再清理
+    // 真实完成验证时由 CompleteDNSChallenge 删除并持久化
+    // 这里不做删除，避免 '未找到DNS挑战信息'
+    _ = p.service.savePendingChallenges()
+    return nil
 }
 
 // Certificate 证书信息
