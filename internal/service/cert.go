@@ -68,24 +68,26 @@ type ManualDNSProvider struct {
 
 // Present 实现dns01.ChallengeProvider接口
 func (p *ManualDNSProvider) Present(domain, token, keyAuth string) error {
-	dnsName, dnsValue := dns01.GetRecord(domain, keyAuth)
-	
-	log.Printf("INFO: DNS挑战 - 域名: %s, DNS名称: %s, DNS值: %s", domain, dnsName, dnsValue)
-	
-	// 存储挑战信息
-	p.service.pendingChallenges[domain] = &LegoDNSChallenge{
-		Domain:    domain,
-		DNSName:   dnsName,
-		DNSValue:  dnsValue,
-		Token:     token,
-		CreatedAt: time.Now(),
-	}
+    dnsName, dnsValue := dns01.GetRecord(domain, keyAuth)
+    
+    log.Printf("INFO: DNS挑战 - 域名: %s, DNS名称: %s, DNS值: %s", domain, dnsName, dnsValue)
 
-	// 持久化挑战信息
-	_ = p.service.savePendingChallenges()
-	
-	// 返回一个特殊的错误，告知需要手动设置DNS记录
-	return fmt.Errorf("manual_dns_required:%s:%s", dnsName, dnsValue)
+    // 如果用户已经手动添加了TXT记录，则直接放行（不再返回手动提示）
+    if ok, _ := p.service.verifyDNSRecord(strings.TrimSuffix(dnsName, "."), dnsValue); ok {
+        log.Printf("INFO: 检测到已存在的TXT记录，直接继续验证: %s", dnsName)
+        return nil
+    }
+
+    // 首次或未检测到记录，存储挑战并提示手动添加
+    p.service.pendingChallenges[domain] = &LegoDNSChallenge{
+        Domain:    domain,
+        DNSName:   dnsName,
+        DNSValue:  dnsValue,
+        Token:     token,
+        CreatedAt: time.Now(),
+    }
+    _ = p.service.savePendingChallenges()
+    return fmt.Errorf("manual_dns_required:%s:%s", dnsName, dnsValue)
 }
 
 // CleanUp 实现dns01.ChallengeProvider接口
