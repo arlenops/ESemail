@@ -138,17 +138,17 @@ function switchSection(section) {
         console.warn('找不到对应的导航链接:', section);
     }
 
-    // 隐藏所有内容区域
-    document.querySelectorAll('[id$="-content"]').forEach(content => {
-        content.classList.add('d-none');
+    // 隐藏所有内容区域 - 使用正确的选择器
+    document.querySelectorAll('.section-content').forEach(content => {
+        content.style.display = 'none';
     });
 
-    // 显示当前section的内容区域
-    const contentElement = document.getElementById(`${section}-content`);
+    // 显示当前section的内容区域 - 使用正确的ID格式
+    const contentElement = document.getElementById(`${section}-section`);
     if (contentElement) {
-        contentElement.classList.remove('d-none');
+        contentElement.style.display = 'block';
     } else {
-        console.warn('找不到对应的内容区域:', `${section}-content`);
+        console.warn('找不到对应的内容区域:', `${section}-section`);
     }
 
     currentSection = section;
