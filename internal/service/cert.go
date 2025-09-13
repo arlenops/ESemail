@@ -167,15 +167,26 @@ func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValida
 		}
 	}
 	
-	// 构建acme.sh命令
+	// 验证和处理邮箱地址
 	email := req.Email
-	if email == "" && s.config.Email != "" {
-		email = s.config.Email
+	
+	// 首先验证请求中的邮箱是否有效
+	if email != "" && s.isValidEmailForAcme(email) {
+		// 请求邮箱有效，直接使用
+	} else {
+		// 请求邮箱无效或为空，检查配置文件邮箱
+		if s.config.Email != "" && s.isValidEmailForAcme(s.config.Email) {
+			email = s.config.Email
+		} else {
+			// 配置邮箱也无效，使用可靠的默认公共邮箱
+			email = "admin@gmail.com"
+		}
 	}
 	
+	// 确保使用正确的ACME服务器地址
 	server := s.config.Server
-	if server == "" {
-		server = "letsencrypt"
+	if server == "" || server == "letsencrypt" {
+		server = "https://acme-v02.api.letsencrypt.org/directory"
 	}
 	
 	args := []string{
@@ -569,13 +580,29 @@ func (s *CertService) issueWithAutomaticDNS(req IssueCertRequest) (*DNSValidatio
 		return nil, fmt.Errorf("无法确定DNS提供商")
 	}
 	
+	// 验证和处理邮箱地址
+	email := req.Email
+	
+	// 首先验证请求中的邮箱是否有效
+	if email != "" && s.isValidEmailForAcme(email) {
+		// 请求邮箱有效，直接使用
+	} else {
+		// 请求邮箱无效或为空，检查配置文件邮箱
+		if s.config.Email != "" && s.isValidEmailForAcme(s.config.Email) {
+			email = s.config.Email
+		} else {
+			// 配置邮箱也无效，使用可靠的默认公共邮箱
+			email = "admin@gmail.com"
+		}
+	}
+	
 	// 构建acme.sh命令
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
 		"--dns", "dns_" + dnsProvider,
-		"--server", "letsencrypt",
-		"--email", req.Email,
+		"--server", "https://acme-v02.api.letsencrypt.org/directory",
+		"--email", email,
 		"--force",
 	}
 	
@@ -714,33 +741,24 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	
 	// 验证和处理邮箱地址
 	email := req.Email
-	if email == "" && s.config.Email != "" {
-		email = s.config.Email
-	}
 	
-	// 如果仍然没有邮箱或邮箱无效，使用可靠的默认邮箱
-	if email == "" || !s.isValidEmailForAcme(email) {
-		// 直接使用常见的公共邮箱域名，避免使用可能无效的申请域名
-		fallbackEmails := []string{
-			"admin@gmail.com",
-			"admin@outlook.com", 
-			"admin@yahoo.com",
-			"admin@hotmail.com",
-		}
-		
-		// 使用第一个有效的公共邮箱
-		email = fallbackEmails[0] // 默认使用gmail
-		for _, fallbackEmail := range fallbackEmails {
-			if s.isValidEmailForAcme(fallbackEmail) {
-				email = fallbackEmail
-				break
-			}
+	// 首先验证请求中的邮箱是否有效
+	if email != "" && s.isValidEmailForAcme(email) {
+		// 请求邮箱有效，直接使用
+	} else {
+		// 请求邮箱无效或为空，检查配置文件邮箱
+		if s.config.Email != "" && s.isValidEmailForAcme(s.config.Email) {
+			email = s.config.Email
+		} else {
+			// 配置邮箱也无效，使用可靠的默认公共邮箱
+			email = "admin@gmail.com"
 		}
 	}
 	
+	// 确保使用正确的ACME服务器地址
 	server := s.config.Server
-	if server == "" {
-		server = "letsencrypt"
+	if server == "" || server == "letsencrypt" {
+		server = "https://acme-v02.api.letsencrypt.org/directory"
 	}
 	
 	// 确保webroot目录存在
@@ -907,21 +925,34 @@ func (s *CertService) isValidEmailForAcme(email string) bool {
 	// 直接检查已知的有效公共邮箱域名
 	validDomains := []string{
 		"gmail.com",
+		"googlemail.com",
 		"outlook.com", 
-		"yahoo.com",
 		"hotmail.com",
+		"live.com",
+		"msn.com",
+		"yahoo.com",
+		"yahoo.co.uk",
+		"yahoo.co.jp",
+		"aol.com",
+		"icloud.com",
+		"me.com",
+		"mac.com",
+		"protonmail.com",
+		"proton.me",
+		"mail.com",
+		"zoho.com",
+		"yandex.com",
+		"mail.ru",
 		"qq.com",
 		"163.com",
 		"126.com",
 		"sina.com",
 		"sohu.com",
-		"live.com",
-		"msn.com",
-		"aol.com",
-		"icloud.com",
-		"protonmail.com",
-		"mail.com",
-		"zoho.com",
+		"foxmail.com",
+		"fastmail.com",
+		"tutanota.com",
+		"gmx.com",
+		"web.de",
 	}
 	
 	// 如果是已知的有效域名，直接返回true
