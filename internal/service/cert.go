@@ -6,6 +6,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"esemail/internal/config"
 	"fmt"
@@ -27,6 +28,7 @@ type CertService struct {
 	legoClient        *lego.Client
 	user              *LegoUser
 	pendingChallenges map[string]*LegoDNSChallenge
+	pendingFilePath   string
 }
 
 // LegoUser 实现lego.User接口
@@ -77,6 +79,9 @@ func (p *ManualDNSProvider) Present(domain, token, keyAuth string) error {
 		Token:     token,
 		CreatedAt: time.Now(),
 	}
+
+	// 持久化挑战信息
+	_ = p.service.savePendingChallenges()
 	
 	// 返回一个特殊的错误，告知需要手动设置DNS记录
 	return fmt.Errorf("manual_dns_required:%s:%s", dnsName, dnsValue)
@@ -86,6 +91,7 @@ func (p *ManualDNSProvider) Present(domain, token, keyAuth string) error {
 func (p *ManualDNSProvider) CleanUp(domain, token, keyAuth string) error {
 	log.Printf("INFO: 清理DNS挑战记录 - 域名: %s", domain)
 	delete(p.service.pendingChallenges, domain)
+	_ = p.service.savePendingChallenges()
 	return nil
 }
 
@@ -114,6 +120,12 @@ func NewCertService(config *config.CertConfig) (*CertService, error) {
 	service := &CertService{
 		config:            config,
 		pendingChallenges: make(map[string]*LegoDNSChallenge),
+		pendingFilePath:   filepath.Join("./data", "certificates", "pending_challenges.json"),
+	}
+
+	// 预加载历史未完成挑战，支持进程重启后继续
+	if err := service.loadPendingChallenges(); err != nil {
+		log.Printf("警告: 加载待验证DNS挑战信息失败: %v", err)
 	}
 
 	// 只有在配置了有效邮箱时才初始化客户端
@@ -340,7 +352,12 @@ func (s *CertService) IssueDNSCert(domain string) (*LegoCertResponse, error) {
 
 // CompleteDNSChallenge 完成DNS挑战验证
 func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, error) {
+	// 支持通配符与规范化域名匹配
 	challenge, exists := s.pendingChallenges[domain]
+	if !exists {
+		normalized := s.normalizeDomain(domain)
+		challenge, exists = s.pendingChallenges[normalized]
+	}
 	if !exists {
 		return &LegoCertResponse{
 			Success: false,
@@ -380,8 +397,9 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 		}, nil
 	}
 
-	// 清理挑战
-	delete(s.pendingChallenges, domain)
+	// 清理挑战并持久化
+	delete(s.pendingChallenges, challenge.Domain)
+	_ = s.savePendingChallenges()
 
 	return &LegoCertResponse{
 		Success: true,
@@ -483,7 +501,53 @@ func (s *CertService) ListCertificates() ([]Certificate, error) {
 func (s *CertService) GetPendingChallenge(domain string) (*LegoDNSChallenge, error) {
 	challenge, exists := s.pendingChallenges[domain]
 	if !exists {
+		normalized := s.normalizeDomain(domain)
+		challenge, exists = s.pendingChallenges[normalized]
+	}
+	if !exists {
 		return nil, fmt.Errorf("未找到域名 %s 的DNS挑战信息", domain)
 	}
 	return challenge, nil
+}
+
+// normalizeDomain 规范化域名（移除通配符前缀）
+func (s *CertService) normalizeDomain(domain string) string {
+	if strings.HasPrefix(domain, "*.") {
+		return strings.TrimPrefix(domain, "*.")
+	}
+	return domain
+}
+
+// savePendingChallenges 将待验证挑战持久化到磁盘
+func (s *CertService) savePendingChallenges() error {
+	path := s.pendingFilePath
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(s.pendingChallenges, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+// loadPendingChallenges 从磁盘读取待验证挑战
+func (s *CertService) loadPendingChallenges() error {
+	path := s.pendingFilePath
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var stored map[string]*LegoDNSChallenge
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return err
+	}
+	if stored != nil {
+		s.pendingChallenges = stored
+	}
+	return nil
 }
