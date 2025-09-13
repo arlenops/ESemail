@@ -887,7 +887,6 @@ async function issueCertificate(e) {
     } else if (data.cert_type === 'wildcard') {
         data.domain = '*.' + data.domain;
         // 通配符证书强制使用DNS验证
-        data.validation_method = 'dns';
     }
 
     const submitBtn = document.getElementById('issue-cert-submit');
@@ -908,11 +907,8 @@ async function issueCertificate(e) {
             if (result.dns_name && result.dns_value) {
                 // DNS验证流程
                 showDNSValidation(result.dns_name, result.dns_value);
-            } else if (result.instructions && result.instructions.type === 'http') {
-                // HTTP验证流程
-                showHTTPValidation(data.domain, result.message);
             } else if (result.success) {
-                // 证书直接申请成功（不常见，但可能发生）
+                // 证书直接申请成功
                 showModal('申请成功', result.message || '证书申请成功', 'success');
                 bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
                 loadCertificates();
@@ -927,42 +923,6 @@ async function issueCertificate(e) {
         submitBtn.disabled = false;
         submitBtn.innerHTML = originalText;
     }
-}
-
-// 显示HTTP验证信息
-function showHTTPValidation(domain, message) {
-    // 隐藏表单，显示HTTP验证区域
-    document.getElementById('issue-cert-form').style.display = 'none';
-    document.getElementById('http-validation-section').classList.remove('d-none');
-
-    // 显示验证说明
-    document.getElementById('http-validation-info').innerHTML = `
-        <div class="alert alert-info">
-            <h6><i class="fas fa-info-circle"></i> HTTP验证说明</h6>
-            <div>${message.replace(/\n/g, '<br>')}</div>
-        </div>
-    `;
-
-    // 获取详细的HTTP挑战信息
-    fetch(`/api/v1/certificates/http-challenge/${domain}`, {
-        headers: getAuthHeaders()
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.instructions) {
-            document.getElementById('http-file-path').value = data.instructions.file_path;
-            document.getElementById('http-file-content').value = data.instructions.file_content;
-            document.getElementById('http-verification-url').value = data.instructions.url;
-        }
-    })
-    .catch(error => {
-        console.error('获取HTTP挑战详情失败:', error);
-    });
-
-    // 切换按钮显示
-    document.getElementById('issue-cert-submit').classList.add('d-none');
-    document.getElementById('continue-http-validation-btn').classList.remove('d-none');
-    document.getElementById('back-to-form-btn').classList.remove('d-none');
 }
 
 // 显示DNS验证信息
@@ -999,62 +959,6 @@ function copyToClipboard(elementId) {
     } catch (err) {
         console.error('复制失败:', err);
         showModal('复制失败', '复制失败，请手动选择并复制', 'warning');
-    }
-}
-
-// 继续HTTP验证
-async function continueHTTPValidation(domain) {
-    const continueBtn = document.getElementById('continue-http-validation-btn');
-    const originalText = continueBtn.innerHTML;
-    continueBtn.disabled = true;
-    continueBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>验证中...';
-
-    const resultDiv = document.getElementById('http-validation-result');
-
-    try {
-        const response = await fetch(`/api/v1/certificates/validate-http/${domain}`, {
-            method: 'POST',
-            headers: getAuthHeaders()
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            resultDiv.innerHTML = `
-                <div class="alert alert-success">
-                    <i class="fas fa-check-circle me-2"></i>
-                    <strong>HTTP验证成功！</strong><br>
-                    <small>${result.message || '证书正在申请中，请稍候...'}</small>
-                </div>
-            `;
-
-            // 等待证书签发完成
-            setTimeout(() => {
-                bootstrap.Modal.getInstance(document.getElementById('issue-cert-modal')).hide();
-                loadCertificates();
-                showModal('申请成功', '证书申请成功！', 'success');
-            }, 3000);
-        } else {
-            resultDiv.innerHTML = `
-                <div class="alert alert-danger">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>HTTP验证失败</strong><br>
-                    <small>${result.error || 'HTTP验证文件未找到或内容不匹配，请检查文件是否正确创建'}</small>
-                </div>
-            `;
-        }
-    } catch (error) {
-        console.error('HTTP验证失败:', error);
-        resultDiv.innerHTML = `
-            <div class="alert alert-danger">
-                <i class="fas fa-exclamation-triangle me-2"></i>
-                <strong>验证请求失败</strong><br>
-                <small>网络错误，请检查连接后重试</small>
-            </div>
-        `;
-    } finally {
-        continueBtn.disabled = false;
-        continueBtn.innerHTML = originalText;
     }
 }
 
@@ -1141,17 +1045,14 @@ function backToForm() {
     // 显示表单，隐藏验证区域
     document.getElementById('issue-cert-form').style.display = 'block';
     document.getElementById('dns-validation-section').classList.add('d-none');
-    document.getElementById('http-validation-section').classList.add('d-none');
 
     // 切换按钮显示
     document.getElementById('issue-cert-submit').classList.remove('d-none');
     document.getElementById('continue-validation-btn').classList.add('d-none');
-    document.getElementById('continue-http-validation-btn').classList.add('d-none');
     document.getElementById('back-to-form-btn').classList.add('d-none');
 
     // 清空结果显示
     document.getElementById('dns-validation-result').innerHTML = '';
-    document.getElementById('http-validation-result').innerHTML = '';
 }
 
 async function renewCertificates() {
