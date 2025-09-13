@@ -872,7 +872,7 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	}
 	
 	// 执行证书申请
-	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
+	output, err = s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
