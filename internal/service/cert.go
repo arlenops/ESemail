@@ -819,20 +819,42 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	
 	// 使用完全独立的工作目录
 	tempAcmeDir := "/tmp/acme-" + fmt.Sprintf("%d", time.Now().Unix())
-	os.MkdirAll(tempAcmeDir, 0755)
-	
-	// 重新下载和安装acme.sh到临时目录
-	fmt.Printf("[INSTALL] 重新下载和安装acme.sh到临时目录 %s...\n", tempAcmeDir)
-	installCmd := fmt.Sprintf(`export LE_WORKING_DIR=%s && curl -s https://get.acme.sh | sh -s -- --home %s --config-home %s --accountemail admin@gmail.com`, tempAcmeDir, tempAcmeDir, tempAcmeDir)
-	installOutput, installErr := s.securityService.ExecuteSecureCommand("bash", []string{"-c", installCmd}, 3*time.Minute)
-	if installErr != nil {
-		fmt.Printf("[INSTALL ERROR] acme.sh安装失败: %v, 输出: %s\n", installErr, string(installOutput))
-	} else {
-		fmt.Printf("[INSTALL SUCCESS] acme.sh重新安装成功\n")
+	fmt.Printf("[INSTALL] 创建临时目录: %s\n", tempAcmeDir)
+	err := os.MkdirAll(tempAcmeDir, 0755)
+	if err != nil {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   fmt.Sprintf("创建临时目录失败: %v", err),
+		}, nil
 	}
 	
-	// 更新acme路径为新的临时目录
+	// 直接下载acme.sh主文件
+	fmt.Printf("[DOWNLOAD] 直接下载acme.sh主文件...\n")
+	downloadCmd := fmt.Sprintf(`cd %s && curl -s https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh -o acme.sh`, tempAcmeDir)
+	downloadOutput, downloadErr := s.securityService.ExecuteSecureCommand("bash", []string{"-c", downloadCmd}, 2*time.Minute)
+	if downloadErr != nil {
+		fmt.Printf("[DOWNLOAD ERROR] 下载失败: %v, 输出: %s\n", downloadErr, string(downloadOutput))
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   fmt.Sprintf("下载acme.sh失败: %v", downloadErr),
+		}, nil
+	}
+	
+	// 设置文件路径和权限
 	acmePath = tempAcmeDir + "/acme.sh"
+	fmt.Printf("[SETUP] 设置acme.sh可执行权限: %s\n", acmePath)
+	os.Chmod(acmePath, 0755)
+	
+	// 检查文件是否存在
+	fmt.Printf("[CHECK] 检查acme.sh是否存在: %s\n", acmePath)
+	if _, err := os.Stat(acmePath); os.IsNotExist(err) {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   fmt.Sprintf("acme.sh下载失败，文件不存在: %s", acmePath),
+		}, nil
+	}
+	
+	fmt.Printf("[INSTALL SUCCESS] acme.sh准备完成: %s\n", acmePath)
 	
 	// 2. 清理账户缓存
 	cleanArgs := []string{"--remove-account", "--server", server}
