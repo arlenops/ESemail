@@ -287,18 +287,36 @@ func (s *CertService) IssueDNSCert(domain, email string) (*LegoCertResponse, err
 	cert, err := s.legoClient.Certificate.Obtain(request)
 	if err != nil {
 		// 检查是否是手动DNS挑战错误
-		if strings.HasPrefix(err.Error(), "manual_dns_required:") {
-			parts := strings.Split(err.Error(), ":")
-			if len(parts) >= 3 {
-				dnsName := parts[1]
-				dnsValue := parts[2]
-				return &LegoCertResponse{
-					Success:  true,
-					DNSName:  dnsName,
-					DNSValue: dnsValue,
-					Message: fmt.Sprintf("请在DNS中添加以下TXT记录:\\n名称: %s\\n值: %s\\n\\n添加完成后，请调用完成验证接口。", 
-						dnsName, dnsValue),
-				}, nil
+		if strings.Contains(err.Error(), "manual_dns_required:") {
+			log.Printf("INFO: 检测到DNS手动验证错误，开始解析")
+
+			// 从错误信息中提取DNS信息
+			errorMsg := err.Error()
+			log.Printf("INFO: DNS错误消息: %s", errorMsg)
+
+			// 找到manual_dns_required的位置并提取后面的内容
+			index := strings.Index(errorMsg, "manual_dns_required:")
+			if index >= 0 {
+				content := errorMsg[index+len("manual_dns_required:"):]
+				log.Printf("INFO: DNS提取内容: %s", content)
+
+				// 分割DNS名称和值
+				parts := strings.SplitN(content, ":", 2)
+				log.Printf("INFO: DNS分割结果: %v", parts)
+
+				if len(parts) >= 2 {
+					dnsName := parts[0]
+					dnsValue := parts[1]
+					log.Printf("INFO: DNS解析结果 - name: %s, value: %s", dnsName, dnsValue)
+
+					return &LegoCertResponse{
+						Success:  true,
+						DNSName:  dnsName,
+						DNSValue: dnsValue,
+						Message: fmt.Sprintf("请在DNS中添加以下TXT记录：\\n名称: %s\\n值: %s\\n\\n添加完成后，请调用完成验证接口。",
+							dnsName, dnsValue),
+					}, nil
+				}
 			}
 		}
 		return &LegoCertResponse{
