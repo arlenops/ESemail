@@ -1,11 +1,12 @@
 package api
 
 import (
-	"esemail/internal/service"
-	"fmt"
-	"net/http"
+    "esemail/internal/service"
+    "fmt"
+    "net/http"
+    "strings"
 
-	"github.com/gin-gonic/gin"
+    "github.com/gin-gonic/gin"
 )
 
 type CertHandler struct {
@@ -102,17 +103,25 @@ func (h *CertHandler) ValidateDNS(c *gin.Context) {
 }
 
 func (h *CertHandler) GetDNSChallenge(c *gin.Context) {
-	domain := c.Param("domain")
-	if domain == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "域名参数不能为空"})
-		return
-	}
+    domain := c.Param("domain")
+    if domain == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"error": "域名参数不能为空"})
+        return
+    }
 
-	challenge, err := h.certService.GetPendingChallenge(domain)
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		return
-	}
+    challenge, err := h.certService.GetPendingChallenge(domain)
+    if err != nil {
+        norm := domain
+        if strings.HasPrefix(norm, "*.") { norm = strings.TrimPrefix(norm, "*.") }
+        c.JSON(http.StatusNotFound, gin.H{
+            "error": err.Error(),
+            "debug": gin.H{
+                "pending_domains": h.certService.GetPendingDomains(),
+                "normalized_domain": norm,
+            },
+        })
+        return
+    }
 
 	c.JSON(http.StatusOK, gin.H{
 		"domain":     challenge.Domain,

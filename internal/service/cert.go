@@ -108,12 +108,13 @@ type Certificate struct {
 
 // LegoCertResponse 证书响应
 type LegoCertResponse struct {
-	Success      bool                   `json:"success"`
-	DNSName      string                 `json:"dns_name,omitempty"`
-	DNSValue     string                 `json:"dns_value,omitempty"`
-	Error        string                 `json:"error,omitempty"`
-	Message      string                 `json:"message,omitempty"`
-	Instructions map[string]interface{} `json:"instructions,omitempty"`
+    Success      bool                   `json:"success"`
+    DNSName      string                 `json:"dns_name,omitempty"`
+    DNSValue     string                 `json:"dns_value,omitempty"`
+    Error        string                 `json:"error,omitempty"`
+    Message      string                 `json:"message,omitempty"`
+    Instructions map[string]interface{} `json:"instructions,omitempty"`
+    Debug        map[string]interface{} `json:"debug,omitempty"`
 }
 
 // NewCertService 创建新的证书服务
@@ -306,9 +307,9 @@ func (s *CertService) IssueDNSCert(domain string) (*LegoCertResponse, error) {
 
 			// 找到manual_dns_required的位置并提取后面的内容
 			index := strings.Index(errorMsg, "manual_dns_required:")
-			if index >= 0 {
-				content := errorMsg[index+len("manual_dns_required:"):]
-				log.Printf("INFO: DNS提取内容: %s", content)
+            if index >= 0 {
+                content := errorMsg[index+len("manual_dns_required:"):]
+                log.Printf("INFO: DNS提取内容: %s", content)
 
 				// 分割DNS名称和值
 				parts := strings.SplitN(content, ":", 2)
@@ -319,16 +320,21 @@ func (s *CertService) IssueDNSCert(domain string) (*LegoCertResponse, error) {
 					dnsValue := parts[1]
 					log.Printf("INFO: DNS解析结果 - name: %s, value: %s", dnsName, dnsValue)
 
-					return &LegoCertResponse{
-						Success:  true,
-						DNSName:  dnsName,
-						DNSValue: dnsValue,
-						Message: fmt.Sprintf("请在DNS中添加以下TXT记录：\\n名称: %s\\n值: %s\\n\\n添加完成后，请调用完成验证接口。",
-							dnsName, dnsValue),
-					}, nil
-				}
-			}
-		}
+                    return &LegoCertResponse{
+                        Success:  true,
+                        DNSName:  dnsName,
+                        DNSValue: dnsValue,
+                        Message: fmt.Sprintf("请在DNS中添加以下TXT记录：\\n名称: %s\\n值: %s\\n\\n添加完成后，请调用完成验证接口。",
+                            dnsName, dnsValue),
+                        Debug: map[string]interface{}{
+                            "pending_file": s.pendingFilePath,
+                            "domain": domain,
+                            "normalized_domain": s.normalizeDomain(domain),
+                        },
+                    }, nil
+                }
+            }
+        }
 		return &LegoCertResponse{
 			Success: false,
 			Error:   fmt.Sprintf("申请证书失败: %v", err),
@@ -359,21 +365,31 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 		normalized := s.normalizeDomain(domain)
 		challenge, exists = s.pendingChallenges[normalized]
 	}
-	if !exists {
-		return &LegoCertResponse{
-			Success: false,
-			Error:   "未找到域名的DNS挑战信息，请重新申请",
-		}, nil
-	}
+    if !exists {
+        tried := []string{domain, s.normalizeDomain(domain)}
+        return &LegoCertResponse{
+            Success: false,
+            Error:   "未找到域名的DNS挑战信息，请重新申请",
+            Debug: map[string]interface{}{
+                "tried_keys":       tried,
+                "pending_domains":  s.GetPendingDomains(),
+                "pending_file":     s.pendingFilePath,
+                "hint":             "请先调用 /api/v1/certificates/issue 并添加返回的 TXT 记录",
+            },
+        }, nil
+    }
 
 	// 验证DNS记录是否已设置
-	if !s.verifyDNSRecord(challenge.DNSName, challenge.DNSValue) {
-		return &LegoCertResponse{
-			Success: false,
-			Error:   fmt.Sprintf("DNS记录验证失败，请确保已正确设置:\n名称: %s\n值: %s", 
-				challenge.DNSName, challenge.DNSValue),
-		}, nil
-	}
+    if ok, dbg := s.verifyDNSRecord(challenge.DNSName, challenge.DNSValue); !ok {
+        if dbg == nil { dbg = map[string]interface{}{} }
+        dbg["dns_name"] = challenge.DNSName
+        dbg["expected_value"] = challenge.DNSValue
+        return &LegoCertResponse{
+            Success: false,
+            Error:   fmt.Sprintf("DNS记录验证失败，请确保已正确设置: 名称=%s 值=%s", challenge.DNSName, challenge.DNSValue),
+            Debug:   dbg,
+        }, nil
+    }
 
 	// 重新尝试证书申请
 	request := certificate.ObtainRequest{
@@ -409,12 +425,12 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 }
 
 // verifyDNSRecord 验证DNS记录
-func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) bool {
+func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) (bool, map[string]interface{}) {
     // 生产级 DNS TXT 验证：多解析器 + 重试 + 规范化比较
     name := dns.Fqdn(strings.TrimSpace(dnsName))
     expected := strings.TrimSpace(expectedValue)
     if name == "." || expected == "" {
-        return false
+        return false, map[string]interface{}{"reason": "invalid input", "fqdn": name}
     }
 
     // 解析器列表（可通过环境变量 DNS_RESOLVERS 覆盖，逗号分隔）
@@ -432,6 +448,7 @@ func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) bool {
 
     attempts := 6
     delay := 5 * time.Second
+    last := map[string][]string{}
 
     for i := 0; i < attempts; i++ {
         for _, server := range resolvers {
@@ -439,11 +456,19 @@ func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) bool {
             if err != nil {
                 continue
             }
+            if len(txts) > 0 { last[server] = txts }
             for _, txt := range txts {
                 v := strings.TrimSpace(strings.Trim(txt, `"`))
                 if v == expected || strings.Contains(v, expected) {
                     log.Printf("INFO: DNS验证通过 %s = %s @ %s", name, v, server)
-                    return true
+                    return true, map[string]interface{}{
+                        "resolvers": resolvers,
+                        "attempts": attempts,
+                        "delay_seconds": int(delay / time.Second),
+                        "fqdn": name,
+                        "server": server,
+                        "observed": last,
+                    }
                 }
             }
         }
@@ -452,7 +477,13 @@ func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) bool {
         }
     }
     log.Printf("WARNING: DNS验证失败 %s 未匹配到期望值", name)
-    return false
+    return false, map[string]interface{}{
+        "resolvers": resolvers,
+        "attempts": attempts,
+        "delay_seconds": int(delay / time.Second),
+        "fqdn": name,
+        "observed": last,
+    }
 }
 
 func queryTXTOnce(server, fqdn string, timeout time.Duration) ([]string, error) {
@@ -573,6 +604,15 @@ func (s *CertService) GetPendingChallenge(domain string) (*LegoDNSChallenge, err
 		return nil, fmt.Errorf("未找到域名 %s 的DNS挑战信息", domain)
 	}
 	return challenge, nil
+}
+
+// GetPendingDomains 返回当前挂起挑战的域名列表（用于调试）
+func (s *CertService) GetPendingDomains() []string {
+    keys := make([]string, 0, len(s.pendingChallenges))
+    for k := range s.pendingChallenges {
+        keys = append(keys, k)
+    }
+    return keys
 }
 
 // normalizeDomain 规范化域名（移除通配符前缀）
