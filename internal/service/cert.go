@@ -893,15 +893,16 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		fmt.Printf("[REGISTER SUCCESS] 账户注册成功\n")
 	}
 	
-	// 使用webroot模式申请证书，添加更多调试参数
+	// 使用DNS方式申请证书（而不是webroot），因为DNS验证已经通过
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
-		"-w", webroot,
+		"--dns", "manual",  // 使用DNS手动验证
 		"--server", server,
 		"--email", email,
 		"--debug", "2",  // 启用详细调试
 		"--log",         // 启用日志记录
+		"--yes-I-know-dns-manual-mode-enough-go-ahead-please",  // 确认使用手动DNS模式
 	}
 	
 	if s.config.ForceRenewal {
@@ -913,12 +914,12 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error: fmt.Sprintf("DNS验证通过，但webroot证书申请失败: %v\n输出: %s\n\n" +
-				"建议解决方案：\n" +
-				"1. 配置DNS API自动申请（最推荐）\n" +
-				"2. 确保 %s 目录可写且web服务器正常运行\n" +
-				"3. 手动完成证书申请", 
-				err, string(output), webroot),
+			Error: fmt.Sprintf("DNS验证通过，但DNS证书申请失败: %v\n输出: %s\n\n" +
+				"可能的原因：\n" +
+				"1. DNS记录还未完全生效，请等待几分钟后重试\n" +
+				"2. 检查DNS记录是否正确设置\n" +
+				"3. Let's Encrypt服务器可能暂时不可用", 
+				err, string(output)),
 		}, nil
 	}
 	
