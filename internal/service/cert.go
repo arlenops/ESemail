@@ -810,15 +810,24 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	// 强制清理所有可能的ACME缓存和配置
 	acmePath := s.getAcmePath()
 	
-	// 1. 清理账户缓存
+	// 1. 彻底清理所有acme.sh相关文件和目录
+	fmt.Printf("[CLEANUP] 开始彻底清理acme.sh缓存...\n")
+	
+	// 删除整个acme.sh配置目录
+	acmeDir := "/root/.acme.sh"
+	os.RemoveAll(acmeDir + "/ca")
+	os.RemoveAll(acmeDir + "/" + req.Domain + "_ecc")
+	os.RemoveAll(acmeDir + "/" + req.Domain)
+	
+	// 2. 清理账户缓存
 	cleanArgs := []string{"--remove-account", "--server", server}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
 	
-	// 2. 清理域名相关的配置
+	// 3. 清理域名相关的配置
 	cleanDomainArgs := []string{"--remove", "-d", req.Domain}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanDomainArgs, 30*time.Second)
 	
-	// 3. 强制验证邮箱，确保没有被替换
+	// 4. 强制验证邮箱，确保没有被替换
 	if !s.isValidEmailForAcme(email) {
 		fmt.Printf("[ERROR] 邮箱验证失败，使用安全回退: %s\n", email)
 		email = "admin@gmail.com"
@@ -830,6 +839,21 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		fmt.Printf("[EMERGENCY] 检测到.local域名邮箱，强制替换: %s\n", email)
 		email = "admin@gmail.com"
 		fmt.Printf("[EMERGENCY] 紧急替换为: %s\n", email)
+	}
+	
+	// 先强制注册新账户，确保使用正确的邮箱
+	fmt.Printf("[REGISTER] 强制注册新ACME账户，邮箱: %s\n", email)
+	registerArgs := []string{
+		"--register-account",
+		"--server", server,
+		"--email", email,
+		"--debug", "2",
+	}
+	output, err := s.securityService.ExecuteSecureCommand(acmePath, registerArgs, 2*time.Minute)
+	if err != nil {
+		fmt.Printf("[REGISTER ERROR] 账户注册失败: %v, 输出: %s\n", err, string(output))
+	} else {
+		fmt.Printf("[REGISTER SUCCESS] 账户注册成功\n")
 	}
 	
 	// 使用webroot模式申请证书，添加更多调试参数

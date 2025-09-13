@@ -171,6 +171,7 @@ func (s *SecurityService) ExecuteSecureCommand(command string, args []string, ti
 		"HOME=/root",
 		"SHELL=/bin/bash",
 		"USER=root",
+		"HOSTNAME=localhost",  // 强制设置主机名为localhost，避免使用HKLite254247859879
 	}
 	
 	// 设置进程组ID，便于清理子进程
@@ -372,17 +373,18 @@ func (s *SecurityService) validateAcmeCommand(args []string) error {
 	
 	// 允许的acme.sh操作
 	allowedOperations := map[string]bool{
-		"--issue":          true,
-		"--installcert":    true,
-		"--list":           true,
-		"--info":           true,
-		"--renew":          true,
-		"--revoke":         true,
-		"--upgrade":        true,
-		"--version":        true,
-		"--help":           true,
-		"--remove-account": true,
-		"--remove":         true,
+		"--issue":            true,
+		"--installcert":      true,
+		"--list":             true,
+		"--info":             true,
+		"--renew":            true,
+		"--revoke":           true,
+		"--upgrade":          true,
+		"--version":          true,
+		"--help":             true,
+		"--remove-account":   true,
+		"--remove":           true,
+		"--register-account": true,
 	}
 	
 	// 允许的参数前缀
