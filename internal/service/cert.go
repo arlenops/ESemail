@@ -850,27 +850,49 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	// DNS验证已通过，尝试直接申请证书
 	fmt.Printf("[CERT] DNS验证成功，开始自动申请证书\n")
 	
-	// 尝试使用webroot模式申请证书（最简单可靠）
-	// 先确保webroot目录存在
-	challengeDir := filepath.Join(webroot, ".well-known", "acme-challenge")
-	err = os.MkdirAll(challengeDir, 0755)
-	if err != nil {
-		fmt.Printf("[WEBROOT WARN] 创建challenge目录失败: %v\n", err)
-	}
+	// DNS验证已通过，尝试使用--renew方式完成证书申请
+	// 因为DNS记录已设置，直接尝试renew（假设之前已有申请记录）
+	fmt.Printf("[RENEW] 尝试使用--renew完成证书申请\n")
 	
-	args := []string{
-		"--issue",
+	renewArgs := []string{
+		"--renew",
 		"-d", req.Domain,
-		"-w", webroot,    // 使用webroot模式
-		"--keylength", "ec-256",  // 使用EC密钥
+		"--keylength", "ec-256",
 		"--server", server,
-		"--email", email,
-		"--force",        // 强制申请
-		"--debug", "2",   // 启用调试
+		"--force",
+		"--debug", "2",
 	}
 	
-	// 执行证书申请
-	output, err = s.securityService.ExecuteSecureCommand(acmePath, args, 3*time.Minute)
+	output, err = s.securityService.ExecuteSecureCommand(acmePath, renewArgs, 3*time.Minute)
+	if err != nil {
+		// renew失败，尝试完整的DNS手动流程
+		fmt.Printf("[RENEW FAILED] renew失败，尝试完整DNS流程: %v\n", err)
+		
+		// 使用echo来自动回答acme.sh的交互
+		dnsArgs := []string{
+			"--issue",
+			"-d", req.Domain,
+			"--dns", "manual",
+			"--keylength", "ec-256", 
+			"--server", server,
+			"--email", email,
+			"--force",
+			"--debug", "2",
+		}
+		
+		// 创建自动回答脚本
+		autoAnswerScript := fmt.Sprintf("/tmp/acme_auto_%d.sh", time.Now().Unix())
+		scriptContent := fmt.Sprintf(`#!/bin/bash
+echo "y" | %s %s
+`, acmePath, strings.Join(dnsArgs, " "))
+		
+		err = os.WriteFile(autoAnswerScript, []byte(scriptContent), 0755)
+		if err == nil {
+			defer os.Remove(autoAnswerScript)
+			output, err = s.securityService.ExecuteSecureCommand("bash", []string{autoAnswerScript}, 3*time.Minute)
+		}
+	}
+	
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
