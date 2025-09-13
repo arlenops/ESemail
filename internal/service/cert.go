@@ -17,16 +17,28 @@ import (
 
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge/dns01"
+	"github.com/go-acme/lego/v4/challenge/http01"
 	"github.com/go-acme/lego/v4/lego"
 	"github.com/go-acme/lego/v4/registration"
 )
 
 // CertService 使用Lego ACME客户端的证书服务
 type CertService struct {
-	config          *config.CertConfig
-	legoClient      *lego.Client
-	user            *LegoUser
+	config            *config.CertConfig
+	legoClient        *lego.Client
+	user              *LegoUser
 	pendingChallenges map[string]*LegoDNSChallenge
+	httpChallenges    map[string]*LegoHTTPChallenge // 新增HTTP挑战存储
+}
+
+// LegoHTTPChallenge HTTP挑战信息
+type LegoHTTPChallenge struct {
+	Domain       string    `json:"domain"`
+	Token        string    `json:"token"`
+	KeyAuth      string    `json:"key_auth"`
+	Path         string    `json:"path"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 // LegoUser 实现lego.User接口
@@ -61,6 +73,64 @@ type LegoDNSChallenge struct {
 // ManualDNSProvider 实现dns01.ChallengeProvider接口
 type ManualDNSProvider struct {
 	service *CertService
+}
+
+// ManualHTTPProvider 实现http01.ChallengeProvider接口
+type ManualHTTPProvider struct {
+	service *CertService
+}
+
+// Present 实现http01.ChallengeProvider接口
+func (p *ManualHTTPProvider) Present(domain, token, keyAuth string) error {
+	path := "/.well-known/acme-challenge/" + token
+
+	log.Printf("INFO: HTTP挑战 - 域名: %s, Token: %s, 路径: %s", domain, token, path)
+
+	// 存储挑战信息
+	p.service.httpChallenges[domain] = &LegoHTTPChallenge{
+		Domain:    domain,
+		Token:     token,
+		KeyAuth:   keyAuth,
+		Path:      path,
+		Content:   keyAuth,
+		CreatedAt: time.Now(),
+	}
+
+	// 将挑战文件保存到磁盘，以便HTTP服务可以提供
+	challengeDir := filepath.Join(p.service.config.CertPath, "acme-challenges")
+	if err := os.MkdirAll(challengeDir, 0755); err != nil {
+		log.Printf("ERROR: 创建挑战目录失败: %v", err)
+		return err
+	}
+
+	challengeFile := filepath.Join(challengeDir, token)
+	if err := os.WriteFile(challengeFile, []byte(keyAuth), 0644); err != nil {
+		log.Printf("ERROR: 写入挑战文件失败: %v", err)
+		return err
+	}
+
+	log.Printf("INFO: HTTP挑战文件已保存: %s", challengeFile)
+
+	// 返回一个特殊的错误，告知需要手动设置HTTP文件
+	return fmt.Errorf("manual_http_required:%s:%s", path, keyAuth)
+}
+
+// CleanUp 实现http01.ChallengeProvider接口
+func (p *ManualHTTPProvider) CleanUp(domain, token, keyAuth string) error {
+	log.Printf("INFO: 清理HTTP挑战文件 - 域名: %s", domain)
+
+	// 从内存中删除挑战信息
+	delete(p.service.httpChallenges, domain)
+
+	// 删除挑战文件
+	challengeFile := filepath.Join(p.service.config.CertPath, "acme-challenges", token)
+	if err := os.Remove(challengeFile); err != nil && !os.IsNotExist(err) {
+		log.Printf("WARNING: 删除挑战文件失败: %v", err)
+	} else {
+		log.Printf("INFO: 已删除挑战文件: %s", challengeFile)
+	}
+
+	return nil
 }
 
 // Present 实现dns01.ChallengeProvider接口
@@ -113,6 +183,7 @@ func NewCertService(config *config.CertConfig) (*CertService, error) {
 	service := &CertService{
 		config:            config,
 		pendingChallenges: make(map[string]*LegoDNSChallenge),
+		httpChallenges:    make(map[string]*LegoHTTPChallenge), // 初始化HTTP挑战存储
 	}
 
 	// 只有在配置了有效邮箱时才初始化客户端
@@ -470,4 +541,141 @@ func (s *CertService) GetPendingChallenge(domain string) (*LegoDNSChallenge, err
 		return nil, fmt.Errorf("未找到域名 %s 的DNS挑战信息", domain)
 	}
 	return challenge, nil
+}
+
+// IssueHTTPCert 开始HTTP证书申请流程
+func (s *CertService) IssueHTTPCert(domain, email string) (*LegoCertResponse, error) {
+	log.Printf("INFO: 开始为域名 %s 申请HTTP证书", domain)
+
+	// 确保客户端已初始化
+	if s.legoClient == nil {
+		if email != "" && email != "admin@example.com" && !strings.Contains(email, "example.") {
+			s.config.Email = email
+			if err := s.initializeClient(); err != nil {
+				return &LegoCertResponse{
+					Success: false,
+					Error:   fmt.Sprintf("初始化证书客户端失败: %v", err),
+				}, nil
+			}
+		} else {
+			return &LegoCertResponse{
+				Success: false,
+				Error:   "证书服务未初始化，请提供有效的邮箱地址",
+			}, nil
+		}
+	}
+
+	// 设置HTTP挑战提供者
+	httpProvider := &ManualHTTPProvider{service: s}
+	err := s.legoClient.Challenge.SetHTTP01Provider(httpProvider)
+	if err != nil {
+		return &LegoCertResponse{
+			Success: false,
+			Error:   fmt.Sprintf("设置HTTP挑战提供者失败: %v", err),
+		}, nil
+	}
+
+	// 禁用DNS挑战（如果之前启用了）
+	s.legoClient.Challenge.Exclude([]string{"dns-01"})
+
+	// 创建证书请求
+	request := certificate.ObtainRequest{
+		Domains: []string{domain},
+		Bundle:  true,
+	}
+
+	// 获取HTTP挑战（这会触发manual provider的Present回调）
+	cert, err := s.legoClient.Certificate.Obtain(request)
+	if err != nil {
+		// 检查是否是手动HTTP挑战错误
+		if strings.HasPrefix(err.Error(), "manual_http_required:") {
+			parts := strings.Split(err.Error(), ":")
+			if len(parts) >= 3 {
+				path := parts[1]
+				content := parts[2]
+				return &LegoCertResponse{
+					Success: true,
+					Message: fmt.Sprintf("请在您的Web服务器上创建以下文件：\n路径: %s\n内容: %s\n\n请确保该文件可通过 http://%s%s 访问，然后调用完成验证接口。",
+						path, content, domain, path),
+				}, nil
+			}
+		}
+		return &LegoCertResponse{
+			Success: false,
+			Error:   fmt.Sprintf("申请HTTP证书失败: %v", err),
+		}, nil
+	}
+
+	// 证书获取成功，保存证书
+	if err := s.saveCertificate(domain, cert); err != nil {
+		return &LegoCertResponse{
+			Success: false,
+			Error:   fmt.Sprintf("保存证书失败: %v", err),
+		}, nil
+	}
+
+	return &LegoCertResponse{
+		Success: true,
+		Message: fmt.Sprintf("HTTP证书申请成功: %s", domain),
+	}, nil
+}
+
+// GetPendingHTTPChallenge 获取待验证的HTTP挑战
+func (s *CertService) GetPendingHTTPChallenge(domain string) (*LegoHTTPChallenge, error) {
+	challenge, exists := s.httpChallenges[domain]
+	if !exists {
+		return nil, fmt.Errorf("未找到域名 %s 的HTTP挑战信息", domain)
+	}
+	return challenge, nil
+}
+
+// CompleteHTTPChallenge 完成HTTP挑战验证
+func (s *CertService) CompleteHTTPChallenge(domain string) (*LegoCertResponse, error) {
+	log.Printf("INFO: 开始完成域名 %s 的HTTP挑战验证", domain)
+
+	challenge, exists := s.httpChallenges[domain]
+	if !exists {
+		return &LegoCertResponse{
+			Success: false,
+			Error:   "未找到对应的HTTP挑战信息",
+		}, nil
+	}
+
+	log.Printf("INFO: 找到HTTP挑战信息 - 域名: %s, 路径: %s", domain, challenge.Path)
+
+	// 这里通常会有验证逻辑，但由于我们使用手动模式，
+	// 我们假设用户已经正确设置了HTTP文件
+
+	// 由于我们使用的是手动HTTP provider，需要重新尝试获取证书
+	// 在实际情况下，lego客户端会自动验证HTTP挑战
+
+	// 创建证书请求并重新尝试
+	request := certificate.ObtainRequest{
+		Domains: []string{domain},
+		Bundle:  true,
+	}
+
+	cert, err := s.legoClient.Certificate.Obtain(request)
+	if err != nil {
+		return &LegoCertResponse{
+			Success: false,
+			Error:   fmt.Sprintf("HTTP证书验证失败: %v", err),
+		}, nil
+	}
+
+	// 证书获取成功，保存证书
+	if err := s.saveCertificate(domain, cert); err != nil {
+		return &LegoCertResponse{
+			Success: false,
+			Error:   fmt.Sprintf("保存证书失败: %v", err),
+		}, nil
+	}
+
+	// 清理挑战信息
+	delete(s.httpChallenges, domain)
+
+	return &LegoCertResponse{
+		Success: true,
+		Message: fmt.Sprintf("HTTP证书申请完成: %s", domain),
+	}, nil
 }

@@ -150,10 +150,10 @@ func SetupRouter(
 
 		// 获取工作流状态
 		state := workflowService.GetCurrentState()
-		
+
 		// 检查系统是否已初始化
 		initStatus := systemService.GetInitializationStatus()
-		
+
 		// 计算功能解锁状态 - 更新的步骤顺序
 		unlockStatus := map[string]bool{
 			"system_init":    initStatus["is_initialized"].(bool),
@@ -164,7 +164,7 @@ func SetupRouter(
 			"mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6, // 邮件服务在步骤6，需要用户管理完成
 			"setup_complete": state.IsSetupComplete,
 		}
-		
+
 		c.HTML(http.StatusOK, "dashboard.html", gin.H{
 			"title":           "ESemail 邮局管理面板",
 			"is_initialized":  initStatus["is_initialized"],
@@ -172,6 +172,26 @@ func SetupRouter(
 			"workflow_state":  state,
 			"unlock_status":   unlockStatus,
 		})
+	})
+
+	// HTTP验证文件服务 - 用于Let's Encrypt ACME挑战
+	r.GET("/.well-known/acme-challenge/:token", func(c *gin.Context) {
+		token := c.Param("token")
+		if token == "" {
+			c.String(http.StatusNotFound, "Token not found")
+			return
+		}
+
+		// 检查是否有对应的HTTP挑战文件
+		// 使用证书服务的路径配置
+		challengePath := filepath.Join(cfg.CertPath, "acme-challenges", token)
+		if content, err := os.ReadFile(challengePath); err == nil {
+			c.Header("Content-Type", "text/plain")
+			c.String(http.StatusOK, string(content))
+			return
+		}
+
+		c.String(http.StatusNotFound, "Challenge file not found")
 	})
 
 	// 登录页面
@@ -391,6 +411,8 @@ func SetupRouter(
 				certs.POST("/issue", certHandler.IssueCertificate)
 				certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
 				certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
+				certs.POST("/validate-http/:domain", certHandler.ValidateHTTP)
+				certs.GET("/http-challenge/:domain", certHandler.GetHTTPChallenge)
 				certs.POST("/renew", certHandler.RenewCertificates)
 			}
 		}
