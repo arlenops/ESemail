@@ -846,16 +846,15 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		fmt.Printf("[REGISTER SUCCESS] 账户注册成功\n")
 	}
 	
-	// 使用DNS方式申请证书（而不是webroot），因为DNS验证已经通过
+	// 使用webroot方式申请证书，因为DNS验证已经通过，ACME可以直接颁发
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
-		"--dns", "manual",  // 使用DNS手动验证
+		"-w", webroot,  // 使用webroot验证
 		"--server", server,
 		"--email", email,
 		"--debug", "2",  // 启用详细调试
 		"--log",         // 启用日志记录
-		"--yes-I-know-dns-manual-mode-enough-go-ahead-please",  // 确认使用手动DNS模式
 	}
 	
 	if s.config.ForceRenewal {
@@ -867,12 +866,12 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error: fmt.Sprintf("DNS验证通过，但DNS证书申请失败: %v\n输出: %s\n\n" +
+			Error: fmt.Sprintf("DNS验证通过，但证书申请失败: %v\n输出: %s\n\n" +
 				"可能的原因：\n" +
-				"1. DNS记录还未完全生效，请等待几分钟后重试\n" +
-				"2. 检查DNS记录是否正确设置\n" +
+				"1. webroot目录 %s 不可写或web服务器未运行\n" +
+				"2. DNS记录还未完全生效，请等待几分钟后重试\n" +
 				"3. Let's Encrypt服务器可能暂时不可用", 
-				err, string(output)),
+				err, string(output), webroot),
 		}, nil
 	}
 	
