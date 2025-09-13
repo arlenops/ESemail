@@ -110,6 +110,14 @@ cert:
   email: "admin@yourdomain.com"
 ```
 
+进阶（受限网络/本地验证）
+- 使用系统解析器进行本地验证（不直连公共DNS）：
+  - `export CERT_DNS_MODE=system`
+- 跳过本地预校验，直接交给 ACME 验证（谨慎使用）：
+  - `export CERT_SKIP_PRECHECK=true`
+- 自定义解析器（逗号分隔）：
+  - `export DNS_RESOLVERS="223.5.5.5:53,119.29.29.29:53"`
+
 也可通过环境变量指定配置文件路径（deploy.sh 会自动识别 config/config.yaml）：
 
 ```bash

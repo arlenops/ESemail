@@ -345,18 +345,18 @@ func SetupRouter(
 			// 其他需要认证的系统管理接口可以放这里
 
 			// 域名管理
-			domains := authenticated.Group("/domains")
-			{
-				domainHandler := NewDomainHandler(domainService, workflowService)
-				domains.GET("", domainHandler.ListDomains)
-				domains.POST("", domainHandler.AddDomain)
-				domains.DELETE("/:domain", domainHandler.DeleteDomain)
-				domains.GET("/:domain/dns", domainHandler.GetDNSRecords)
-				domains.POST("/:domain/dns/check", domainHandler.CheckDNSRecords)
-				domains.POST("/:domain/dns/verify", domainHandler.VerifyDNSRecords) // 专业DNS验证
-				domains.POST("/:domain/ssl/request", domainHandler.RequestSSLCertificate) // SSL证书申请
-				domains.GET("/test-dns", domainHandler.TestDNSQuery)
-			}
+        domains := authenticated.Group("/domains")
+        {
+            domainHandler := NewDomainHandler(domainService, workflowService, certService)
+            domains.GET("", domainHandler.ListDomains)
+            domains.POST("", domainHandler.AddDomain)
+            domains.DELETE("/:domain", domainHandler.DeleteDomain)
+            domains.GET("/:domain/dns", domainHandler.GetDNSRecords)
+            domains.POST("/:domain/dns/check", domainHandler.CheckDNSRecords)
+            domains.POST("/:domain/dns/verify", domainHandler.VerifyDNSRecords) // 专业DNS验证
+            domains.POST("/:domain/ssl/request", domainHandler.RequestSSLCertificate) // SSL证书申请
+            domains.GET("/test-dns", domainHandler.TestDNSQuery)
+        }
 
 			// 用户管理
 			users := authenticated.Group("/users")

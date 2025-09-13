@@ -9,15 +9,17 @@ import (
 )
 
 type DomainHandler struct {
-	domainService   *service.DomainService
-	workflowService *service.WorkflowService
+    domainService   *service.DomainService
+    workflowService *service.WorkflowService
+    certService     *service.CertService
 }
 
-func NewDomainHandler(domainService *service.DomainService, workflowService *service.WorkflowService) *DomainHandler {
-	return &DomainHandler{
-		domainService:   domainService,
-		workflowService: workflowService,
-	}
+func NewDomainHandler(domainService *service.DomainService, workflowService *service.WorkflowService, certService *service.CertService) *DomainHandler {
+    return &DomainHandler{
+        domainService:   domainService,
+        workflowService: workflowService,
+        certService:     certService,
+    }
 }
 
 func (h *DomainHandler) ListDomains(c *gin.Context) {
@@ -121,29 +123,48 @@ func (h *DomainHandler) VerifyDNSRecords(c *gin.Context) {
 
 // RequestSSLCertificate 申请SSL证书
 func (h *DomainHandler) RequestSSLCertificate(c *gin.Context) {
-	domain := c.Param("domain")
+    domain := c.Param("domain")
 
-	if err := h.domainService.RequestSSLCertificate(domain); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
-	}
+    // 改为调用证书服务发起DNS-01挑战
+    result, err := h.certService.IssueDNSCert(domain)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{
+            "success": false,
+            "error":   err.Error(),
+        })
+        return
+    }
 
-	// SSL证书申请成功，推进工作流到步骤4
-	if h.workflowService != nil {
-		if err := h.workflowService.CompleteStep(4); err != nil {
-			c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
-		}
-	}
+    if result.Success {
+        // SSL证书申请触发后，推进工作流到步骤3（SSL/TLS证书配置）
+        if h.workflowService != nil {
+            if err := h.workflowService.CompleteStep(3); err != nil {
+                c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
+            }
+        }
 
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "SSL证书申请已提交",
-		"domain":  domain,
-		"note":    "请检查证书状态以确认申请结果",
-	})
+        resp := gin.H{
+            "success": true,
+            "message": result.Message,
+            "domain":  domain,
+        }
+        if result.DNSName != "" {
+            resp["dns_name"] = result.DNSName
+            resp["dns_value"] = result.DNSValue
+            resp["instructions"] = result.Instructions
+        }
+        if result.Debug != nil {
+            resp["debug"] = result.Debug
+        }
+        c.JSON(http.StatusOK, resp)
+        return
+    }
+
+    c.JSON(http.StatusBadRequest, gin.H{
+        "success": false,
+        "error":   result.Error,
+        "debug":   result.Debug,
+    })
 }
 
 // GetCertificateStatus 获取SSL证书状态

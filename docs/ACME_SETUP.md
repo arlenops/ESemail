@@ -185,7 +185,14 @@ sudo systemctl stop nginx apache2 httpd 2>/dev/null || true
 #### 4. DNS验证失败
 ```bash
 # 检查DNS记录是否生效
-dig TXT _acme-challenge.yourdomain.com +short
+# 方式一：使用系统解析器进行本地验证（不直连公共DNS）
+export CERT_DNS_MODE=system
+
+# 方式二：自定义解析器（逗号分隔）
+export DNS_RESOLVERS="223.5.5.5:53,119.29.29.29:53"
+
+# 方式三（谨慎）：跳过本地预校验，直接交给ACME验证
+export CERT_SKIP_PRECHECK=true
 
 # 等待DNS传播（通常需要几分钟到几小时）
 ```

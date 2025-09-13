@@ -11,6 +11,7 @@ import (
 	"esemail/internal/config"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -434,6 +435,13 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 
 // verifyDNSRecord 验证DNS记录
 func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) (bool, map[string]interface{}) {
+    // 允许跳过预校验，直接交给 ACME 验证（适用于受限网络环境）
+    if strings.EqualFold(os.Getenv("CERT_SKIP_PRECHECK"), "true") {
+        return true, map[string]interface{}{
+            "skipped": true,
+            "reason":  "CERT_SKIP_PRECHECK=true",
+        }
+    }
     // 生产级 DNS TXT 验证：多解析器 + 重试 + 规范化比较
     name := dns.Fqdn(strings.TrimSpace(dnsName))
     expected := strings.TrimSpace(expectedValue)
@@ -441,6 +449,40 @@ func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) (bool, map[
         return false, map[string]interface{}{"reason": "invalid input", "fqdn": name}
     }
 
+    // 模式1：使用系统解析器（/etc/resolv.conf），不显式访问公共DNS
+    if strings.EqualFold(os.Getenv("CERT_DNS_MODE"), "system") {
+        attempts := 6
+        delay := 5 * time.Second
+        last := map[string][]string{}
+        for i := 0; i < attempts; i++ {
+            txts, err := net.LookupTXT(strings.TrimSuffix(name, "."))
+            if err == nil && len(txts) > 0 {
+                last["system"] = txts
+                for _, txt := range txts {
+                    v := strings.TrimSpace(strings.Trim(txt, `"`))
+                    if v == expected || strings.Contains(v, expected) {
+                        return true, map[string]interface{}{
+                            "mode": "system",
+                            "attempts": attempts,
+                            "delay_seconds": int(delay / time.Second),
+                            "fqdn": name,
+                            "observed": last,
+                        }
+                    }
+                }
+            }
+            if i < attempts-1 { time.Sleep(delay) }
+        }
+        return false, map[string]interface{}{
+            "mode": "system",
+            "attempts": 6,
+            "delay_seconds": 5,
+            "fqdn": name,
+            "observed": last,
+        }
+    }
+
+    // 模式2：使用显式解析器列表（默认公共DNS，可通过环境变量覆盖）
     // 解析器列表（可通过环境变量 DNS_RESOLVERS 覆盖，逗号分隔）
     resolvers := []string{"1.1.1.1:53", "8.8.8.8:53", "8.8.4.4:53"}
     if env := os.Getenv("DNS_RESOLVERS"); env != "" {
