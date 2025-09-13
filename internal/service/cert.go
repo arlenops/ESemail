@@ -170,11 +170,12 @@ type Certificate struct {
 
 // LegoCertResponse 证书响应
 type LegoCertResponse struct {
-	Success  bool   `json:"success"`
-	DNSName  string `json:"dns_name,omitempty"`
-	DNSValue string `json:"dns_value,omitempty"`
-	Error    string `json:"error,omitempty"`
-	Message  string `json:"message,omitempty"`
+	Success      bool                   `json:"success"`
+	DNSName      string                 `json:"dns_name,omitempty"`
+	DNSValue     string                 `json:"dns_value,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Message      string                 `json:"message,omitempty"`
+	Instructions map[string]interface{} `json:"instructions,omitempty"`
 }
 
 // NewCertService 创建新的证书服务
@@ -588,15 +589,46 @@ func (s *CertService) IssueHTTPCert(domain, email string) (*LegoCertResponse, er
 	if err != nil {
 		// 检查是否是手动HTTP挑战错误
 		if strings.HasPrefix(err.Error(), "manual_http_required:") {
-			parts := strings.Split(err.Error(), ":")
-			if len(parts) >= 3 {
-				path := parts[1]
-				content := parts[2]
-				return &LegoCertResponse{
-					Success: true,
-					Message: fmt.Sprintf("请在您的Web服务器上创建以下文件：\n路径: %s\n内容: %s\n\n请确保该文件可通过 http://%s%s 访问，然后调用完成验证接口。",
-						path, content, domain, path),
-				}, nil
+			// 从错误信息中提取路径和内容
+			// 格式: manual_http_required:path:content
+			errorMsg := err.Error()
+			// 移除前缀
+			content := strings.TrimPrefix(errorMsg, "manual_http_required:")
+			// 分割路径和内容，找到第二个冒号的位置
+			parts := strings.SplitN(content, ":", 2)
+			if len(parts) >= 2 {
+				path := parts[0]
+				keyAuth := parts[1]
+
+				// 获取存储的挑战信息（包含更多详细信息）
+				challenge, exists := s.httpChallenges[domain]
+				if exists {
+					return &LegoCertResponse{
+						Success: true,
+						Message: fmt.Sprintf("HTTP验证已准备就绪。请确保以下文件可以通过HTTP访问：\n\n文件路径: %s\n文件内容: %s\n验证URL: http://%s%s\n\n文件已自动保存到服务器，如需手动创建请使用上述内容。\n\n准备就绪后，请点击\"完成HTTP验证\"按钮。",
+							challenge.Path, challenge.Content, domain, challenge.Path),
+						Instructions: map[string]interface{}{
+							"type":         "http",
+							"file_path":    challenge.Path,
+							"file_content": challenge.Content,
+							"url":          fmt.Sprintf("http://%s%s", domain, challenge.Path),
+							"note":         "文件已自动保存到服务器，准备就绪后请点击完成验证按钮",
+						},
+					}, nil
+				} else {
+					return &LegoCertResponse{
+						Success: true,
+						Message: fmt.Sprintf("请在您的Web服务器上创建以下文件：\n\n文件路径: %s\n文件内容: %s\n验证URL: http://%s%s\n\n准备就绪后，请调用完成验证接口。",
+							path, keyAuth, domain, path),
+						Instructions: map[string]interface{}{
+							"type":         "http",
+							"file_path":    path,
+							"file_content": keyAuth,
+							"url":          fmt.Sprintf("http://%s%s", domain, path),
+							"note":         "请创建此文件后调用完成验证接口",
+						},
+					}, nil
+				}
 			}
 		}
 		return &LegoCertResponse{
