@@ -847,19 +847,60 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		fmt.Printf("[REGISTER SUCCESS] 账户注册成功\n")
 	}
 	
-	// DNS验证已通过，现在返回成功并提示用户手动完成证书申请
-	// 因为acme.sh的手动DNS模式需要交互式操作
-	fmt.Printf("[SUCCESS] DNS验证已完成，DNS记录已正确设置\n")
+	// DNS验证已通过，尝试直接申请证书
+	fmt.Printf("[CERT] DNS验证成功，开始自动申请证书\n")
+	
+	// 尝试使用webroot模式申请证书（最简单可靠）
+	// 先确保webroot目录存在
+	challengeDir := filepath.Join(webroot, ".well-known", "acme-challenge")
+	err = os.MkdirAll(challengeDir, 0755)
+	if err != nil {
+		fmt.Printf("[WEBROOT WARN] 创建challenge目录失败: %v\n", err)
+	}
+	
+	args := []string{
+		"--issue",
+		"-d", req.Domain,
+		"-w", webroot,    // 使用webroot模式
+		"--keylength", "ec-256",  // 使用EC密钥
+		"--server", server,
+		"--email", email,
+		"--force",        // 强制申请
+		"--debug", "2",   // 启用调试
+	}
+	
+	// 执行证书申请
+	output, err = s.securityService.ExecuteSecureCommand(acmePath, args, 3*time.Minute)
+	if err != nil {
+		return &DNSValidationResponse{
+			Success: false,
+			Error: fmt.Sprintf("DNS验证成功，但证书申请失败: %v\n输出: %s\n\n" +
+				"可能原因：\n" +
+				"1. 端口80被占用或web服务器未运行\n" +
+				"2. webroot目录 %s 权限不足\n" +
+				"3. 防火墙阻止了HTTP访问\n\n" +
+				"手动完成方法：\n" +
+				"%s --issue -d %s --dns manual --server %s --email %s", 
+				err, string(output), webroot, acmePath, req.Domain, server, email),
+		}, nil
+	}
+	
+	fmt.Printf("[CERT SUCCESS] 证书申请成功\n")
+	
+	// 自动安装证书
+	if err := s.installCertificateWithAcme(req.Domain); err != nil {
+		return &DNSValidationResponse{
+			Success: false,
+			Error:   fmt.Sprintf("证书申请成功，但安装失败: %v", err),
+		}, nil
+	}
+	
+	// 清除待验证的挑战
+	s.removePendingChallenge(req.Domain)
 	
 	return &DNSValidationResponse{
 		Success: true,
-		Message: fmt.Sprintf("DNS验证成功！域名 %s 的DNS记录已正确设置。\n\n" +
-			"由于当前使用手动DNS验证模式，请在服务器上手动执行以下命令完成证书申请：\n\n" +
-			"1. 登录服务器\n" +
-			"2. 运行命令：%s --issue -d %s --dns manual --server %s --email %s\n" +
-			"3. 按提示操作（DNS记录已设置，直接确认即可）\n\n" +
-			"或者配置DNS API实现全自动证书申请。", 
-			req.Domain, acmePath, req.Domain, server, email),
+		Message: fmt.Sprintf("DNS验证和证书申请都已成功完成！域名 %s 的SSL证书已安装。", req.Domain),
 	}, nil
 }
 
