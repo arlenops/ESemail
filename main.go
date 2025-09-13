@@ -31,7 +31,10 @@ func main() {
 	systemService := service.NewSystemService()
 	domainService := service.NewDomainServiceWithConfig(dataDir)
 	userService := service.NewUserService()
-	certService := service.NewCertService(&cfg.Cert)
+	certService, err := service.NewCertService(&cfg.Cert)
+	if err != nil {
+		log.Fatalf("证书服务初始化失败: %v", err)
+	}
 	setupService := service.NewSetupService()
 	environmentService := service.NewEnvironmentService()
 	dnsService := service.NewDNSService()

@@ -33,18 +33,9 @@ mail:
   max_concurrent: 10
 
 cert:
-  acme_path: "/root/.acme.sh"
   cert_path: "/etc/ssl/mail"
-  webroot_path: "/var/www/html"
-  dns_provider: ""  # 可选: cf, ali, dp, aws, gd, namesilo 等
-  auto_renew: true
-  renew_days: 30
   server: "letsencrypt"
   email: "admin@example.com"
-  key_size: 2048
-  enable_http_challenge: true
-  enable_dns_challenge: true
-  force_renewal: false
 
 security:
   jwt_secret: ""  # 请设置一个强密码

@@ -35,11 +35,6 @@ func NewSecurityService() *SecurityService {
 		"df":             true,  // 允许df用于磁盘使用率查询
 		"dig":            true,  // 允许dig用于DNS查询
 		"which":          true,  // 允许which用于查找命令路径
-		"curl":           true,  // 临时允许curl用于下载acme.sh
-		"sh":             true,  // 临时允许sh用于acme.sh安装
-		"bash":           true,  // 允许bash用于执行acme.sh安装脚本
-		"wget":           true,  // 临时允许wget用于acme.sh安装
-		"acme.sh":        true,  // 启用acme.sh用于证书管理，但限制参数
 	}
 
 	// 严格的域名验证正则
@@ -136,35 +131,10 @@ func (s *SecurityService) ExecuteSecureCommand(command string, args []string, ti
 		return nil, fmt.Errorf("命令 '%s' 不被允许执行", baseName)
 	}
 	
-	// 对于acme.sh，需要额外验证路径安全性
-	if baseName == "acme.sh" && strings.Contains(command, "/") {
-		if err := s.validateAcmeShPath(command); err != nil {
-			return nil, fmt.Errorf("acme.sh路径验证失败: %v", err)
-		}
-	}
-	
-	// 对acme.sh进行特殊安全验证
-	if baseName == "acme.sh" {
-		if err := s.validateAcmeCommand(args); err != nil {
-			return nil, fmt.Errorf("acme.sh参数验证失败: %v", err)
-		}
-	} else if baseName == "bash" {
-		// 对bash命令进行特殊验证，只允许-c参数用于执行acme.sh安装
-		if len(args) >= 2 && args[0] == "-c" && strings.Contains(args[1], "acme.sh") {
-			// 允许acme.sh安装命令
-		} else {
-			return nil, fmt.Errorf("bash命令只允许执行acme.sh相关操作")
-		}
-	} else if baseName == "curl" || baseName == "wget" || baseName == "sh" {
-		// 这些命令在acme.sh安装过程中会被调用，暂时允许
-		// 在生产环境中应该有更严格的验证
-		// TODO: 添加更严格的参数验证
-	} else {
-		// 其他命令的通用参数验证
-		for i, arg := range args {
-			if strings.ContainsAny(arg, ";|&$`\"'\\<>{}[]") {
-				return nil, fmt.Errorf("参数 %d 包含危险字符: %s", i, arg)
-			}
+	// 通用参数验证
+	for i, arg := range args {
+		if strings.ContainsAny(arg, ";|&$`\"'\\<>{}[]") {
+			return nil, fmt.Errorf("参数 %d 包含危险字符: %s", i, arg)
 		}
 	}
 	
@@ -357,110 +327,3 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 	return status, nil
 }
 
-// validateAcmeShPath 验证acme.sh路径的安全性
-func (s *SecurityService) validateAcmeShPath(path string) error {
-	// 允许的acme.sh路径
-	allowedPaths := []string{
-		"/root/.acme.sh/acme.sh",     // 默认安装位置
-		"/home/acme/.acme.sh/acme.sh", // 用户安装位置
-		"/usr/local/bin/acme.sh",     // 系统安装位置
-		"/opt/acme.sh/acme.sh",       // 可选安装位置
-	}
-	
-	for _, allowedPath := range allowedPaths {
-		if path == allowedPath {
-			return nil
-		}
-	}
-	
-	// 允许临时目录中的acme.sh（用于重新安装）
-	if strings.HasPrefix(path, "/tmp/acme-") && strings.HasSuffix(path, "/acme.sh") {
-		return nil
-	}
-	
-	return fmt.Errorf("不允许的acme.sh路径: %s", path)
-}
-
-// validateAcmeCommand 验证acme.sh命令参数的安全性
-func (s *SecurityService) validateAcmeCommand(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("acme.sh命令参数不能为空")
-	}
-	
-	// 允许的acme.sh操作
-	allowedOperations := map[string]bool{
-		"--issue":            true,
-		"--installcert":      true,
-		"--list":             true,
-		"--info":             true,
-		"--renew":            true,
-		"--revoke":           true,
-		"--upgrade":          true,
-		"--version":          true,
-		"--help":             true,
-		"--remove-account":   true,
-		"--remove":           true,
-		"--register-account": true,
-	}
-	
-	// 允许的参数前缀
-	allowedParamPrefixes := []string{
-		"-d", "--domain",
-		"-w", "--webroot",
-		"--dns",
-		"--cert-file", "--key-file", "--ca-file", "--fullchain-file",
-		"--reloadcmd", "--postrun", "--renew-hook",
-		"--server", "--email", "--accountemail",
-		"--force", "--debug", "--log", "--syslog",
-		"--manual", "--standalone", "--alpn",
-		"--keylength", "--accountkeylength",
-		"--pre-hook", "--post-hook", "--renew-hook",
-		"--staging", "--test",
-		"--httpport", "--tlsport", "--local-address",
-		"--webroot", "--standalone", "--alpn",
-	}
-	
-	// 检查第一个参数是否是允许的操作
-	if !allowedOperations[args[0]] {
-		return fmt.Errorf("不允许的acme.sh操作: %s", args[0])
-	}
-	
-	// 验证所有参数
-	for i, arg := range args {
-		// 跳过第一个操作参数
-		if i == 0 {
-			continue
-		}
-		
-		// 检查参数是否包含危险字符
-		if strings.ContainsAny(arg, ";|&$`\"'<>{}[]") {
-			return fmt.Errorf("参数包含危险字符: %s", arg)
-		}
-		
-		// 如果是选项参数，检查是否在允许列表中
-		if strings.HasPrefix(arg, "-") {
-			allowed := false
-			for _, prefix := range allowedParamPrefixes {
-				if strings.HasPrefix(arg, prefix) {
-					allowed = true
-					break
-				}
-			}
-			if !allowed {
-				return fmt.Errorf("不允许的acme.sh参数: %s", arg)
-			}
-		} else {
-			// 非选项参数，验证域名或路径格式
-			if strings.Contains(arg, ".") { // 可能是域名
-				if err := s.ValidateDomain(arg); err != nil {
-					// 如果不是有效域名，检查是否是安全的文件路径
-					if err := s.ValidateFilePath(arg); err != nil {
-						return fmt.Errorf("无效的域名或路径: %s", arg)
-					}
-				}
-			}
-		}
-	}
-	
-	return nil
-}
