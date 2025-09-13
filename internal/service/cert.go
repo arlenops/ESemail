@@ -4,6 +4,7 @@ import (
 	"esemail/internal/config"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -749,11 +750,12 @@ func (s *CertService) completeDNSChallenge(dnsName, dnsValue string) (*DNSValida
 func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*DNSValidationResponse, error) {
 	req := challenge.Request
 	
-	// 检查acme.sh是否可用
-	if !s.isAcmeAvailable() {
+	// 检查并确保acme.sh可用
+	acmePath, err := s.ensureAcmeInstalled()
+	if err != nil {
 		return &DNSValidationResponse{
 			Success: false,
-			Error:   "acme.sh未安装或不可用。请先安装acme.sh：curl https://get.acme.sh | sh",
+			Error:   fmt.Sprintf("acme.sh安装失败: %v", err),
 		}, nil
 	}
 	
@@ -807,64 +809,15 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 原始邮箱: %s\n", req.Email)
 	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 最终使用邮箱: %s\n", email)
 	
-	// 强制清理所有可能的ACME缓存和配置
-	acmePath := s.getAcmePath()
-	
-	// 1. 彻底删除和重新安装acme.sh
-	fmt.Printf("[CLEANUP] 开始彻底重新安装acme.sh...\n")
-	
-	// 完全删除acme.sh目录
-	acmeDir := "/root/.acme.sh"
-	os.RemoveAll(acmeDir)
-	
-	// 使用完全独立的工作目录
-	tempAcmeDir := "/tmp/acme-" + fmt.Sprintf("%d", time.Now().Unix())
-	fmt.Printf("[INSTALL] 创建临时目录: %s\n", tempAcmeDir)
-	err := os.MkdirAll(tempAcmeDir, 0755)
-	if err != nil {
-		return &DNSValidationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("创建临时目录失败: %v", err),
-		}, nil
-	}
-	
-	// 直接下载acme.sh主文件
-	fmt.Printf("[DOWNLOAD] 直接下载acme.sh主文件...\n")
-	downloadCmd := fmt.Sprintf(`cd %s && curl -s https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh -o acme.sh`, tempAcmeDir)
-	downloadOutput, downloadErr := s.securityService.ExecuteSecureCommand("bash", []string{"-c", downloadCmd}, 2*time.Minute)
-	if downloadErr != nil {
-		fmt.Printf("[DOWNLOAD ERROR] 下载失败: %v, 输出: %s\n", downloadErr, string(downloadOutput))
-		return &DNSValidationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("下载acme.sh失败: %v", downloadErr),
-		}, nil
-	}
-	
-	// 设置文件路径和权限
-	acmePath = tempAcmeDir + "/acme.sh"
-	fmt.Printf("[SETUP] 设置acme.sh可执行权限: %s\n", acmePath)
-	os.Chmod(acmePath, 0755)
-	
-	// 检查文件是否存在
-	fmt.Printf("[CHECK] 检查acme.sh是否存在: %s\n", acmePath)
-	if _, err := os.Stat(acmePath); os.IsNotExist(err) {
-		return &DNSValidationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("acme.sh下载失败，文件不存在: %s", acmePath),
-		}, nil
-	}
-	
-	fmt.Printf("[INSTALL SUCCESS] acme.sh准备完成: %s\n", acmePath)
-	
-	// 2. 清理账户缓存
+	// 清理账户缓存
 	cleanArgs := []string{"--remove-account", "--server", server}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
 	
-	// 3. 清理域名相关的配置
+	// 清理域名相关的配置
 	cleanDomainArgs := []string{"--remove", "-d", req.Domain}
 	s.securityService.ExecuteSecureCommand(acmePath, cleanDomainArgs, 30*time.Second)
 	
-	// 4. 强制验证邮箱，确保没有被替换
+	// 强制验证邮箱，确保没有被替换
 	if !s.isValidEmailForAcme(email) {
 		fmt.Printf("[ERROR] 邮箱验证失败，使用安全回退: %s\n", email)
 		email = "admin@gmail.com"
@@ -1003,6 +956,70 @@ func (s *CertService) isAcmeAvailable() bool {
 	}
 	
 	return false
+}
+
+// ensureAcmeInstalled 确保acme.sh已安装，如果没有则自动安装
+func (s *CertService) ensureAcmeInstalled() (string, error) {
+	// 首先检查是否已安装
+	acmePath := s.getAcmePath()
+	if acmePath != "" {
+		return acmePath, nil
+	}
+	
+	fmt.Printf("[INSTALL] acme.sh未安装，开始自动安装\n")
+	
+	// 创建临时目录用于下载和安装
+	tmpDir := fmt.Sprintf("/tmp/acme-install-%d", time.Now().Unix())
+	err := os.MkdirAll(tmpDir, 0755)
+	if err != nil {
+		return "", fmt.Errorf("创建临时目录失败: %v", err)
+	}
+	defer os.RemoveAll(tmpDir) // 清理临时目录
+	
+	// 下载acme.sh到临时目录
+	acmeFile := filepath.Join(tmpDir, "acme.sh")
+	downloadArgs := []string{
+		"-L", "-o", acmeFile,
+		"https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh",
+	}
+	
+	fmt.Printf("[DOWNLOAD] 下载acme.sh到: %s\n", acmeFile)
+	output, err := s.securityService.ExecuteSecureCommand("curl", downloadArgs, 2*time.Minute)
+	if err != nil {
+		return "", fmt.Errorf("下载acme.sh失败: %v, 输出: %s", err, string(output))
+	}
+	
+	// 检查下载是否成功
+	if _, err := os.Stat(acmeFile); os.IsNotExist(err) {
+		return "", fmt.Errorf("acme.sh下载失败，文件不存在: %s", acmeFile)
+	}
+	
+	// 设置可执行权限
+	err = os.Chmod(acmeFile, 0755)
+	if err != nil {
+		return "", fmt.Errorf("设置acme.sh权限失败: %v", err)
+	}
+	
+	// 执行安装到标准位置
+	installArgs := []string{"--install", "--home", "/root/.acme.sh"}
+	fmt.Printf("[INSTALL] 安装acme.sh到标准位置\n")
+	output, err = s.securityService.ExecuteSecureCommand(acmeFile, installArgs, 2*time.Minute)
+	if err != nil {
+		fmt.Printf("[INSTALL WARN] 标准安装失败: %v, 输出: %s\n", err, string(output))
+		// 标准安装失败，直接返回临时文件路径
+		return acmeFile, nil
+	}
+	
+	fmt.Printf("[INSTALL SUCCESS] acme.sh安装成功\n")
+	
+	// 再次检查安装结果
+	finalPath := s.getAcmePath()
+	if finalPath != "" {
+		return finalPath, nil
+	}
+	
+	// 如果标准位置还是找不到，返回临时文件路径
+	return acmeFile, nil
 }
 
 // getAcmePath 获取acme.sh的实际路径
