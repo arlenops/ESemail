@@ -37,6 +37,7 @@ type DNSValidationResponse struct {
 	DNSName  string `json:"dns_name,omitempty"`
 	DNSValue string `json:"dns_value,omitempty"`
 	Error    string `json:"error,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 type PendingChallenge struct {
@@ -846,54 +847,19 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 		fmt.Printf("[REGISTER SUCCESS] 账户注册成功\n")
 	}
 	
-	// DNS验证已通过，现在尝试直接使用alpn-01模式（不需要socat）
-	// 或者如果有webroot且端口80可用则使用webroot模式
-	fmt.Printf("[CERT] 开始证书申请，避免socat依赖\n")
-	
-	args := []string{
-		"--issue",
-		"-d", req.Domain,
-		"--alpn",         // 使用ALPN验证，不需要socat
-		"--tlsport", "8443",  // 使用非特权TLS端口
-		"--server", server,
-		"--email", email,
-		"--debug", "2",   // 启用详细调试
-		"--log",          // 启用日志记录
-		"--force",        // 强制申请
-	}
-	
-	if s.config.ForceRenewal {
-		args = append(args, "--force")
-	}
-	
-	// 执行证书申请
-	output, err = s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
-	if err != nil {
-		return &DNSValidationResponse{
-			Success: false,
-			Error: fmt.Sprintf("DNS验证通过，但证书申请失败: %v\n输出: %s\n\n" +
-				"可能的原因：\n" +
-				"1. 端口8443被占用或无法绑定\n" +
-				"2. DNS记录还未完全生效，请等待几分钟后重试\n" +
-				"3. ALPN验证失败，可能需要配置防火墙\n" +
-				"4. 建议配置DNS API自动验证以避免此问题", 
-				err, string(output)),
-		}, nil
-	}
-	
-	// 自动安装证书
-	if err := s.installCertificateWithAcme(req.Domain); err != nil {
-		return &DNSValidationResponse{
-			Success: false,
-			Error:   fmt.Sprintf("证书申请成功，但安装失败: %v", err),
-		}, nil
-	}
-	
-	// 清除待验证的挑战
-	s.removePendingChallenge(req.Domain)
+	// DNS验证已通过，现在返回成功并提示用户手动完成证书申请
+	// 因为acme.sh的手动DNS模式需要交互式操作
+	fmt.Printf("[SUCCESS] DNS验证已完成，DNS记录已正确设置\n")
 	
 	return &DNSValidationResponse{
 		Success: true,
+		Message: fmt.Sprintf("DNS验证成功！域名 %s 的DNS记录已正确设置。\n\n" +
+			"由于当前使用手动DNS验证模式，请在服务器上手动执行以下命令完成证书申请：\n\n" +
+			"1. 登录服务器\n" +
+			"2. 运行命令：%s --issue -d %s --dns manual --server %s --email %s\n" +
+			"3. 按提示操作（DNS记录已设置，直接确认即可）\n\n" +
+			"或者配置DNS API实现全自动证书申请。", 
+			req.Domain, acmePath, req.Domain, server, email),
 	}, nil
 }
 
