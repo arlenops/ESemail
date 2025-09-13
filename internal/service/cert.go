@@ -189,12 +189,19 @@ func (s *CertService) issueCertificateWithHTTP(req IssueCertRequest) (*DNSValida
 		server = "https://acme-v02.api.letsencrypt.org/directory"
 	}
 	
+	// 清理可能存在的错误ACME账户缓存
+	acmePath := s.getAcmePath()
+	cleanArgs := []string{"--remove-account", "--server", server}
+	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
+	
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
 		"-w", webroot,
 		"--server", server,
 		"--email", email,
+		"--debug", "2",  // 启用详细调试
+		"--log",         // 启用日志记录
 	}
 	
 	if s.config.ForceRenewal {
@@ -596,18 +603,25 @@ func (s *CertService) issueWithAutomaticDNS(req IssueCertRequest) (*DNSValidatio
 		}
 	}
 	
+	// 清理可能存在的错误ACME账户缓存
+	acmePath := s.getAcmePath()
+	server := "https://acme-v02.api.letsencrypt.org/directory"
+	cleanArgs := []string{"--remove-account", "--server", server}
+	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
+	
 	// 构建acme.sh命令
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
 		"--dns", "dns_" + dnsProvider,
-		"--server", "https://acme-v02.api.letsencrypt.org/directory",
+		"--server", server,
 		"--email", email,
+		"--debug", "2",  // 启用详细调试
+		"--log",         // 启用日志记录
 		"--force",
 	}
 	
 	// 执行自动DNS验证
-	acmePath := s.getAcmePath()
 	output, err := s.securityService.ExecuteSecureCommand(acmePath, args, 5*time.Minute)
 	if err != nil {
 		return nil, fmt.Errorf("自动DNS验证失败: %v, 输出: %s", err, string(output))
@@ -780,13 +794,20 @@ func (s *CertService) executeRealDNSCertRequest(challenge *PendingChallenge) (*D
 	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 原始邮箱: %s\n", req.Email)
 	fmt.Printf("[DEBUG] executeRealDNSCertRequest - 最终使用邮箱: %s\n", email)
 	
-	// 使用webroot模式申请证书
+	// 清理可能存在的错误ACME账户缓存
+	acmePath := s.getAcmePath()
+	cleanArgs := []string{"--remove-account", "--server", server}
+	s.securityService.ExecuteSecureCommand(acmePath, cleanArgs, 30*time.Second)
+	
+	// 使用webroot模式申请证书，添加更多调试参数
 	args := []string{
 		"--issue",
 		"-d", req.Domain,
-		"-w", webroot,  // 使用-w而不是--webroot
+		"-w", webroot,
 		"--server", server,
 		"--email", email,
+		"--debug", "2",  // 启用详细调试
+		"--log",         // 启用日志记录
 	}
 	
 	if s.config.ForceRenewal {

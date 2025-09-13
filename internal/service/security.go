@@ -372,15 +372,16 @@ func (s *SecurityService) validateAcmeCommand(args []string) error {
 	
 	// 允许的acme.sh操作
 	allowedOperations := map[string]bool{
-		"--issue":        true,
-		"--installcert":  true,
-		"--list":         true,
-		"--info":         true,
-		"--renew":        true,
-		"--revoke":       true,
-		"--upgrade":      true,
-		"--version":      true,
-		"--help":         true,
+		"--issue":          true,
+		"--installcert":    true,
+		"--list":           true,
+		"--info":           true,
+		"--renew":          true,
+		"--revoke":         true,
+		"--upgrade":        true,
+		"--version":        true,
+		"--help":           true,
+		"--remove-account": true,
 	}
 	
 	// 允许的参数前缀
