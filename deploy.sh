@@ -65,17 +65,25 @@ deploy_local() {
 
     echo "🎯 启动服务..."
     nohup ./esemail > esemail.log 2>&1 &
-    sleep 3
+    
+    # 等待健康检查：最多重试10次（约30秒）
+    ok=false
+    for i in {1..10}; do
+        sleep 3
+        if curl -s http://localhost:8686/api/v1/health > /dev/null; then
+            ok=true
+            break
+        fi
+    done
 
-    # 验证启动
-    if curl -s http://localhost:8686/api/v1/health > /dev/null; then
+    if [ "$ok" = true ]; then
         echo "✅ 本地部署成功！"
         echo "📊 访问地址: http://localhost:8686"
         echo "📋 日志文件: $(pwd)/esemail.log"
         tail -f esemail.log
     else
-        echo "❌ 服务启动失败，查看日志:"
-        tail -20 esemail.log
+        echo "❌ 服务启动失败，查看日志(最近200行):"
+        tail -200 esemail.log
         exit 1
     fi
 }
