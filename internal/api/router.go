@@ -157,13 +157,19 @@ func SetupRouter(
 		// 检查系统是否已初始化
 		initStatus := systemService.GetInitializationStatus()
 
-		// 计算功能解锁状态 - 更新的步骤顺序
+        // 计算功能解锁状态 - 更新的步骤顺序（对证书/用户管理更宽松：有域名即可解锁）
+            hasDomains := false
+            if domains, err := domainService.ListDomains(); err == nil && len(domains) > 0 {
+                hasDomains = true
+            }
             unlockStatus := map[string]bool{
                 "system_init":    initStatus["is_initialized"].(bool),
                 // 域名管理解锁仅取决于完成“系统初始化”步骤（工作流第1步）
                 "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
-                "ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3, // SSL配置在步骤3，需要域名配置完成
-                "user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4, // 用户管理在步骤4，需要域名配置完成
+                // 证书管理：存在域名即可解锁（或已到步骤3）
+                "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
+                // 用户管理：存在域名即可解锁（或已到步骤4）
+                "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
                 "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5, // DNS验证在步骤5
                 "mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6, // 邮件服务在步骤6，需要用户管理完成
                 "setup_complete": state.IsSetupComplete,
@@ -329,13 +335,17 @@ func SetupRouter(
                 }
                 unlockCache.mu.RUnlock()
 
-                // 计算最新状态
+                // 计算最新状态（证书/用户管理：存在域名即可解锁）
                 initStatus := systemService.GetInitializationStatus()
+                hasDomains := false
+                if domains, err := domainService.ListDomains(); err == nil && len(domains) > 0 {
+                    hasDomains = true
+                }
                 unlockStatus := map[string]bool{
                     "system_init":    initStatus["is_initialized"].(bool),
-                    "domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
-                    "ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
-                    "user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
+                    "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
+                    "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
+                    "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
                     "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
                     "mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6,
                     "setup_complete": state.IsSetupComplete,
