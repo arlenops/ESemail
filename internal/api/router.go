@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+    "sync"
+    "time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -303,10 +305,28 @@ func SetupRouter(
 			workflow.POST("/reset", workflowHandler.ResetWorkflow) // 仅用于开发测试
 
 			// 获取功能解锁状态
+			// 5分钟缓存，避免高频调用
+			var unlockCache = struct {
+				mu   sync.RWMutex
+				data gin.H
+				at   time.Time
+			}{}
+
 			workflow.GET("/unlock-status", func(c *gin.Context) {
+				// 尝试返回缓存
+				unlockCache.mu.RLock()
+				if !unlockCache.at.IsZero() && time.Since(unlockCache.at) < 5*time.Minute && unlockCache.data != nil {
+					c.Header("Cache-Control", "public, max-age=300")
+					c.Header("X-Cache", "HIT")
+					c.JSON(http.StatusOK, unlockCache.data)
+					unlockCache.mu.RUnlock()
+					return
+				}
+				unlockCache.mu.RUnlock()
+
+				// 计算最新状态
 				state := workflowService.GetCurrentState()
 				initStatus := systemService.GetInitializationStatus()
-
 				unlockStatus := map[string]bool{
 					"system_init":    initStatus["is_initialized"].(bool),
 					"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
@@ -317,11 +337,21 @@ func SetupRouter(
 					"setup_complete": state.IsSetupComplete,
 				}
 
-				c.JSON(http.StatusOK, gin.H{
+				resp := gin.H{
 					"success": true,
 					"unlock_status": unlockStatus,
 					"workflow_state": state,
-				})
+				}
+
+				// 写入缓存
+				unlockCache.mu.Lock()
+				unlockCache.data = resp
+				unlockCache.at = time.Now()
+				unlockCache.mu.Unlock()
+
+				c.Header("Cache-Control", "public, max-age=300")
+				c.Header("X-Cache", "MISS")
+				c.JSON(http.StatusOK, resp)
 			})
 		}
 
