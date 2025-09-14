@@ -553,13 +553,13 @@ func (s *SystemService) generateDovecotConfig(setupData *SetupConfig) string {
 protocols = imap pop3 lmtp
 listen = *
 
-# SSL 配置 - 使用系统默认证书
+# SSL 配置
 ssl = yes
 ssl_cert = </etc/ssl/mail/%s/fullchain.pem
 ssl_key = </etc/ssl/mail/%s/private.key
 
 # 邮件存储配置
-mail_location = maildir:/var/mail/vhosts/%d/%n
+mail_location = maildir:/var/mail/vhosts/%%d/%%n
 mail_uid = vmail
 mail_gid = vmail
 
@@ -569,13 +569,13 @@ auth_mechanisms = plain login
 # 简单的密码数据库配置
 passdb {
   driver = passwd-file
-  args = scheme=PLAIN username_format=%u /etc/dovecot/users
+  args = scheme=PLAIN username_format=%%u /etc/dovecot/users
 }
 
 # 用户数据库配置
 userdb {
   driver = static
-  args = uid=vmail gid=vmail home=/var/mail/vhosts/%d/%n
+  args = uid=vmail gid=vmail home=/var/mail/vhosts/%%d/%%n
 }
 
 # IMAP 服务配置
@@ -586,8 +586,7 @@ service imap-login {
   inet_listener imaps {
     port = 993
     ssl = yes
-}
-`, mailHost, mailHost)
+  }
 }
 
 # POP3 服务配置
@@ -620,7 +619,8 @@ namespace inbox {
   mailbox Trash {
     special_use = \Trash
   }
-}`
+}
+`, mailHost, mailHost)
 }
 
 func (s *SystemService) generateRspamdConfig() string {
