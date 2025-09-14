@@ -19,23 +19,27 @@ type SecurityService struct {
 }
 
 func NewSecurityService() *SecurityService {
-	allowedCommands := map[string]bool{
-		"systemctl":      true,
-		"opendkim-genkey": true,
-		"apt":            true,
-		"dpkg":           true,
-		"postmap":        true,
-		"postfix":        true,
-		"dovecot":        true,
-		"chown":          true,
-		"chmod":          true,
-		"groupadd":       true,  // 允许创建用户组
-		"useradd":        true,  // 允许创建用户
-		"openssl":        true,  // 允许openssl用于证书解析
-		"df":             true,  // 允许df用于磁盘使用率查询
-		"dig":            true,  // 允许dig用于DNS查询
-		"which":          true,  // 允许which用于查找命令路径
-	}
+    allowedCommands := map[string]bool{
+        "systemctl":      true,
+        "opendkim-genkey": true,
+        "apt":            true,
+        "dpkg":           true,
+        "postmap":        true,
+        "postfix":        true,
+        "dovecot":        true,
+        "chown":          true,
+        "chmod":          true,
+        "groupadd":       true,  // 允许创建用户组
+        "useradd":        true,  // 允许创建用户
+        "openssl":        true,  // 允许openssl用于证书解析
+        "df":             true,  // 允许df用于磁盘使用率查询
+        "dig":            true,  // 允许dig用于DNS查询
+        "which":          true,  // 允许which用于查找命令路径
+        "resolvectl":     true,  // 刷新systemd-resolved缓存
+        "systemd-resolve": true, // 兼容旧命令
+        "rndc":           true,  // BIND9 缓存刷新
+        "unbound-control": true, // Unbound 缓存刷新
+    }
 
 	// 严格的域名验证正则
 	domainRegex := regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$`)
@@ -216,6 +220,52 @@ func (s *SecurityService) ValidateFilePath(path string) error {
 	return nil
 }
 
+// CommandExists 检测命令是否存在于系统中
+func (s *SecurityService) CommandExists(cmd string) bool {
+    _, err := s.ExecuteSecureCommand("which", []string{cmd}, 3*time.Second)
+    return err == nil
+}
+
+// FlushDNSCache 在本机尽力刷新DNS缓存（多策略，忽略错误）
+func (s *SecurityService) FlushDNSCache() {
+    // 优先使用 resolvectl
+    if s.CommandExists("resolvectl") {
+        if _, err := s.ExecuteSecureCommand("resolvectl", []string{"flush-caches"}, 5*time.Second); err == nil {
+            log.Printf("INFO: 已执行 resolvectl flush-caches")
+            return
+        }
+    }
+    // 兼容旧命令 systemd-resolve
+    if s.CommandExists("systemd-resolve") {
+        if _, err := s.ExecuteSecureCommand("systemd-resolve", []string{"--flush-caches"}, 5*time.Second); err == nil {
+            log.Printf("INFO: 已执行 systemd-resolve --flush-caches")
+            return
+        }
+    }
+    // 尝试重启常见缓存服务（可能需要root权限）
+    services := []string{"systemd-resolved", "dnsmasq", "nscd", "named", "bind9", "unbound"}
+    for _, svc := range services {
+        if _, err := s.ExecuteSecureCommand("systemctl", []string{"restart", svc}, 8*time.Second); err == nil {
+            log.Printf("INFO: 已重启DNS缓存服务: %s", svc)
+            return
+        }
+    }
+    // 直接调用缓存控制工具
+    if s.CommandExists("rndc") {
+        if _, err := s.ExecuteSecureCommand("rndc", []string{"flush"}, 5*time.Second); err == nil {
+            log.Printf("INFO: 已执行 rndc flush")
+            return
+        }
+    }
+    if s.CommandExists("unbound-control") {
+        if _, err := s.ExecuteSecureCommand("unbound-control", []string{"flush_zone", "."}, 5*time.Second); err == nil {
+            log.Printf("INFO: 已执行 unbound-control flush_zone .")
+            return
+        }
+    }
+    log.Printf("INFO: 未能刷新DNS缓存或无需刷新，继续验证")
+}
+
 // GenerateDKIMKeySecure 安全地生成DKIM密钥
 func (s *SecurityService) GenerateDKIMKeySecure(domain string) error {
 	// 验证域名
@@ -326,4 +376,3 @@ func (s *SecurityService) CheckServiceStatusSecure(serviceName string) (string, 
 	log.Printf("INFO: 服务 %s 状态: %s", serviceName, status)
 	return status, nil
 }
-

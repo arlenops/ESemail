@@ -439,6 +439,10 @@ func (s *CertService) CompleteDNSChallenge(domain string) (*LegoCertResponse, er
 
 // verifyDNSRecord 验证DNS记录
 func (s *CertService) verifyDNSRecord(dnsName, expectedValue string) (bool, map[string]interface{}) {
+    // 在验证之前尽力刷新本机DNS缓存
+    if s.security != nil {
+        s.security.FlushDNSCache()
+    }
     // 轻量化：仅使用本机Linux命令 dig 进行验证（通过安全执行器）
     name := strings.TrimSpace(dnsName)
     expected := strings.TrimSpace(expectedValue)
