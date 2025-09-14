@@ -565,6 +565,47 @@ func (s *CertService) ListCertificates() ([]Certificate, error) {
 	return certificates, nil
 }
 
+// DeleteCertificate 删除指定域名的已安装证书，并回退服务配置至系统默认证书
+func (s *CertService) DeleteCertificate(domain string) error {
+    if domain == "" {
+        return fmt.Errorf("域名不能为空")
+    }
+    // 归一化：只保留小写
+    d := strings.ToLower(domain)
+    certDir := filepath.Join(s.config.CertPath, d)
+
+    // 删除证书目录
+    if _, err := os.Stat(certDir); err == nil {
+        if err := os.RemoveAll(certDir); err != nil {
+            return fmt.Errorf("删除证书目录失败: %v", err)
+        }
+    }
+
+    // 清理挂起挑战
+    delete(s.pendingChallenges, d)
+    _ = s.savePendingChallenges()
+
+    // 重新生成服务配置，确保回退到 snakeoil 证书，避免服务失败
+    setupSvc := NewSetupService()
+    setupData := setupSvc.LoadSetupData()
+    if setupData != nil {
+        sys := NewSystemService()
+        // 生成并写入配置文件（包含 dovecot/postfix），此时若无自有证书将使用 snakeoil
+        if err := sys.generateConfigsStep(setupData); err != nil {
+            // 不阻断删除，但记录错误
+            log.Printf("WARNING: 重新生成服务配置失败: %v", err)
+        }
+    }
+
+    // 重载服务以应用配置
+    if s.security != nil {
+        _, _ = s.security.ExecuteSecureCommand("systemctl", []string{"reload", "postfix"}, 10*time.Second)
+        _, _ = s.security.ExecuteSecureCommand("systemctl", []string{"reload", "dovecot"}, 10*time.Second)
+    }
+
+    return nil
+}
+
 // GetPendingChallenge 获取待验证的DNS挑战
 func (s *CertService) GetPendingChallenge(domain string) (*LegoDNSChallenge, error) {
 	challenge, exists := s.pendingChallenges[domain]

@@ -191,3 +191,22 @@ func (h *CertHandler) GetPendingChallenges(c *gin.Context) {
     }
     c.JSON(http.StatusOK, gin.H{"success": true, "data": list})
 }
+
+// DeleteCertificate 删除证书
+func (h *CertHandler) DeleteCertificate(c *gin.Context) {
+    domain := c.Param("domain")
+    if domain == "" {
+        c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "域名不能为空"})
+        return
+    }
+    // 归一化: 尝试对根域名补全 mail.
+    norm := domain
+    if !strings.HasPrefix(strings.ToLower(norm), "mail.") {
+        norm = "mail." + norm
+    }
+    if err := h.certService.DeleteCertificate(norm); err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, gin.H{"success": true, "message": "证书已删除", "domain": norm})
+}

@@ -396,19 +396,20 @@ func SetupRouter(
 			}
 
         // 证书管理
-        certs := authenticated.Group("/certificates")
-        {
-            certHandler := NewCertHandler(certService)
-            certHandler.workflowService = workflowService
-            certs.GET("", certHandler.ListCertificates)
-            certs.POST("/issue", certHandler.IssueCertificate)
-            certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
-            certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
-            certs.POST("/renew", certHandler.RenewCertificates)
-            certs.GET("/settings", certHandler.GetSettings)
-            certs.POST("/settings", certHandler.UpdateSettings)
-            certs.GET("/pending", certHandler.GetPendingChallenges)
-        }
+            certs := authenticated.Group("/certificates")
+            {
+                certHandler := NewCertHandler(certService)
+                certHandler.workflowService = workflowService
+                certs.GET("", certHandler.ListCertificates)
+                certs.POST("/issue", certHandler.IssueCertificate)
+                certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
+                certs.GET("/dns-challenge/:domain", certHandler.GetDNSChallenge)
+                certs.POST("/renew", certHandler.RenewCertificates)
+                certs.GET("/settings", certHandler.GetSettings)
+                certs.POST("/settings", certHandler.UpdateSettings)
+                certs.GET("/pending", certHandler.GetPendingChallenges)
+                certs.DELETE("/:domain", certHandler.DeleteCertificate)
+            }
 
         // 应用配置（API管理）
         cfgAPI := authenticated.Group("/config")
