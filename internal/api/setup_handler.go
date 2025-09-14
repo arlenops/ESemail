@@ -9,13 +9,15 @@ import (
 )
 
 type SetupHandler struct {
-	setupService *service.SetupService
+    setupService    *service.SetupService
+    workflowService *service.WorkflowService
 }
 
-func NewSetupHandler(setupService *service.SetupService) *SetupHandler {
-	return &SetupHandler{
-		setupService: setupService,
-	}
+func NewSetupHandler(setupService *service.SetupService, workflowService *service.WorkflowService) *SetupHandler {
+    return &SetupHandler{
+        setupService:    setupService,
+        workflowService: workflowService,
+    }
 }
 
 func (h *SetupHandler) GetSetupStatus(c *gin.Context) {
@@ -37,18 +39,24 @@ func (h *SetupHandler) ConfigureSystem(c *gin.Context) {
 	log.Printf("解析配置参数成功: 域名=%s, 管理员=%s, 主机名=%s", 
 		config.Domain, config.AdminEmail, config.Hostname)
 
-	if err := h.setupService.ConfigureSystem(config); err != nil {
-		log.Printf("系统配置失败: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+    if err := h.setupService.ConfigureSystem(config); err != nil {
+        log.Printf("系统配置失败: %v", err)
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
-	log.Printf("系统配置成功完成")
-	c.JSON(http.StatusOK, gin.H{
-		"message": "系统配置完成",
-		"next_steps": []string{
-			"配置域名DNS记录",
-			"申请SSL证书",
+    log.Printf("系统配置成功完成")
+    // 初始化设置完成后，推进工作流到第1步（系统初始化）
+    if h.workflowService != nil {
+        if err := h.workflowService.CompleteStep(1); err != nil {
+            c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
+        }
+    }
+    c.JSON(http.StatusOK, gin.H{
+        "message": "系统配置完成",
+        "next_steps": []string{
+            "配置域名DNS记录",
+            "申请SSL证书",
 			"测试邮件收发",
 		},
 	})

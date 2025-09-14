@@ -1769,24 +1769,39 @@
 
     <!-- 添加域名模态框 -->
     <div class="modal fade" id="add-domain-modal" tabindex="-1">
-        <div class="modal-dialog">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">添加域名</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="add-domain-form">
-                        <div class="mb-3">
-                            <label for="domain-name" class="form-label">域名</label>
-                            <input type="text" class="form-control" id="domain-name" name="domain" required placeholder="example.com">
-                            <div class="form-text">请输入完整的域名，如：example.com</div>
+                    <div class="row g-3">
+                        <div class="col-md-8">
+                            <form id="add-domain-form">
+                                <div class="mb-3">
+                                    <label for="domain-name" class="form-label">域名</label>
+                                    <input type="text" class="form-control" id="domain-name" name="domain" required placeholder="example.com">
+                                    <div class="form-text">请输入完整的域名，如：example.com</div>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="domain-active" name="active" checked>
+                                    <label class="form-check-label" for="domain-active">启用域名</label>
+                                </div>
+                            </form>
                         </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="domain-active" name="active" checked>
-                            <label class="form-check-label" for="domain-active">启用域名</label>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-header"><i class="fas fa-info-circle"></i> 提示</div>
+                                <div class="card-body">
+                                    <ul class="list-unstyled small">
+                                        <li>建议使用你的业务主域名</li>
+                                        <li>创建后可立即申请证书与添加用户</li>
+                                    </ul>
+                                </div>
+                            </div>
                         </div>
-                    </form>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>

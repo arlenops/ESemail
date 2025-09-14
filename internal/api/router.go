@@ -276,12 +276,13 @@ func SetupRouter(
 		api.GET("/csrf-token", middleware.GetCSRFTokenHandler(csrfConfig))
 
 		// 系统设置相关（无需认证，用于初始化）
-		setup := api.Group("/setup")
-		{
-			setup.GET("/status", NewSetupHandler(setupService).GetSetupStatus)
-			setup.POST("/configure", NewSetupHandler(setupService).ConfigureSystem)
-			setup.GET("/dkim", NewSetupHandler(setupService).GetDKIMRecord)
-		}
+        setup := api.Group("/setup")
+        {
+            sh := NewSetupHandler(setupService, workflowService)
+            setup.GET("/status", sh.GetSetupStatus)
+            setup.POST("/configure", sh.ConfigureSystem)
+            setup.GET("/dkim", sh.GetDKIMRecord)
+        }
 
 		// 系统初始化（无需认证）
 		system := api.Group("/system")
