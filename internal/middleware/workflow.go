@@ -1,16 +1,16 @@
 package middleware
 
 import (
-	"esemail/internal/service"
-	"net/http"
-	"strings"
+    "esemail/internal/service"
+    "net/http"
+    "strings"
 
-	"github.com/gin-gonic/gin"
+    "github.com/gin-gonic/gin"
 )
 
 // WorkflowMiddleware 工作流程控制中间件
 func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFunc {
-	return func(c *gin.Context) {
+    return func(c *gin.Context) {
 		// 获取请求路径
 		path := c.Request.URL.Path
 		
@@ -54,43 +54,44 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 				c.Abort()
 				return
 			}
-		} else if strings.HasPrefix(path, "/api/v1/certificates") {
-			// 证书管理需要域名配置完成（步骤3）
-			if state.CurrentStep < 3 {
-				c.JSON(http.StatusLocked, gin.H{
-					"success": false,
-					"error":   "功能未解锁",
-					"message": "请先完成域名配置",
-					"required_step": "域名配置",
-				})
-				c.Abort()
-				return
-			}
-		} else if strings.HasPrefix(path, "/api/v1/users") {
-			// 用户管理需要域名配置完成（步骤4）
-			if state.CurrentStep < 4 {
-				c.JSON(http.StatusLocked, gin.H{
-					"success": false,
-					"error":   "功能未解锁",
-					"message": "请先完成域名配置",
-					"required_step": "域名配置",
-				})
-				c.Abort()
-				return
-			}
-		} else if strings.HasPrefix(path, "/api/v1/mail") {
-			// 邮件服务需要用户管理完成（步骤6）
-			if state.CurrentStep < 6 {
-				c.JSON(http.StatusLocked, gin.H{
-					"success": false,
-					"error":   "功能未解锁",
-					"message": "请先完成用户管理和SSL证书配置",
-					"required_step": "用户管理",
-				})
-				c.Abort()
-				return
-			}
-		}
+        } else if strings.HasPrefix(path, "/api/v1/certificates") {
+            // 放宽：有域名或已到步骤3即可访问
+            // 由于中间件无法访问domainService，这里以工作流进度为准：到达步骤2（完成域名添加）即可
+            if state.CurrentStep < 3 && state.CurrentStep < 2 {
+                c.JSON(http.StatusLocked, gin.H{
+                    "success": false,
+                    "error":   "功能未解锁",
+                    "message": "请先添加域名",
+                    "required_step": "域名配置",
+                })
+                c.Abort()
+                return
+            }
+        } else if strings.HasPrefix(path, "/api/v1/users") {
+            // 放宽：到达步骤2（有域名）即可访问
+            if state.CurrentStep < 2 {
+                c.JSON(http.StatusLocked, gin.H{
+                    "success": false,
+                    "error":   "功能未解锁",
+                    "message": "请先添加域名",
+                    "required_step": "域名配置",
+                })
+                c.Abort()
+                return
+            }
+        } else if strings.HasPrefix(path, "/api/v1/mail") {
+            // 邮件服务需要用户管理完成（步骤6）
+            if state.CurrentStep < 6 {
+                c.JSON(http.StatusLocked, gin.H{
+                    "success": false,
+                    "error":   "功能未解锁",
+                    "message": "请先完成用户管理和SSL证书配置",
+                    "required_step": "用户管理",
+                })
+                c.Abort()
+                return
+            }
+        }
 		
 		c.Next()
 	}
