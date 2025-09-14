@@ -345,7 +345,36 @@ func (s *CertService) IssueDNSCert(domain string) (*LegoCertResponse, error) {
         time.Sleep(200 * time.Millisecond)
     }
 
-    // 若尚未拿到挑战，仍返回成功并提示前端稍后获取
+    // 若尚未拿到挑战，检查证书是否已直接签发（授权可能仍有效）
+    certDir := filepath.Join(s.config.CertPath, domain)
+    certFile := filepath.Join(certDir, "fullchain.pem")
+    if _, err := os.Stat(certFile); err == nil {
+        // 读取证书信息
+        if data, err := os.ReadFile(certFile); err == nil {
+            if block, _ := pem.Decode(data); block != nil {
+                if crt, err := x509.ParseCertificate(block.Bytes); err == nil {
+                    return &LegoCertResponse{
+                        Success: true,
+                        Message: "检测到该域名授权仍有效，本次无需添加DNS记录，证书已直接签发并安装。",
+                        Debug: map[string]interface{}{
+                            "mode":       "immediate",
+                            "domain":     domain,
+                            "issuer":     crt.Issuer.CommonName,
+                            "expires_at": crt.NotAfter,
+                        },
+                    }, nil
+                }
+            }
+        }
+        // 未能解析证书也返回立即签发成功
+        return &LegoCertResponse{
+            Success: true,
+            Message: "检测到该域名授权仍有效，本次无需添加DNS记录，证书已直接签发并安装。",
+            Debug: map[string]interface{}{"mode": "immediate", "domain": domain},
+        }, nil
+    }
+
+    // 否则提示前端稍后刷新或查看挂起挑战
     return &LegoCertResponse{
         Success: true,
         Message: "已发起DNS-01挑战，正在获取挑战信息，请稍后刷新或查看挂起挑战列表。",
