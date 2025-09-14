@@ -162,10 +162,13 @@ func SetupRouter(
             if domains, err := domainService.ListDomains(); err == nil && len(domains) > 0 {
                 hasDomains = true
             }
+            // 兼容：初始化完成但工作流未及时持久化时，仍立即解锁
+            systemSetup := setupService.IsSystemSetup()
             unlockStatus := map[string]bool{
-                "system_init":    initStatus["is_initialized"].(bool),
-                // 域名管理解锁仅取决于完成“系统初始化”步骤（工作流第1步）
-                "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
+                // 使用Setup完成标志作为系统初始化的快速判断
+                "system_init":    systemSetup,
+                // 域名管理解锁：系统初始化已完成 或 工作流到达第2步
+                "domain_config":  (systemSetup || containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
                 // 证书管理：存在域名即可解锁（或已到步骤3）
                 "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
                 // 用户管理：存在域名即可解锁（或已到步骤4）
@@ -347,12 +350,12 @@ func SetupRouter(
                 unlockCache.mu.RUnlock()
 
                 // 计算最新状态（仅基于工作流与域名/用户，避免重度系统调用导致阻塞）
-                systemInit := containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2
+                systemInit := setupService.IsSystemSetup() || containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2
                 hasDomains := curDomainCount > 0
                 hasUsers := curActiveUsers > 0
                 unlockStatus := map[string]bool{
                     "system_init":    systemInit,
-                    "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
+                    "domain_config":  (systemInit || containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
                     "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
                     "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
                     "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
