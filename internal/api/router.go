@@ -313,21 +313,31 @@ func SetupRouter(
 			workflow.POST("/reset", workflowHandler.ResetWorkflow) // 仅用于开发测试
 
 			// 获取功能解锁状态
-            // 5分钟缓存，避免高频调用；当工作流状态更新时立即失效
+            // 5分钟缓存，避免高频调用；当工作流状态/域名/用户变更时立即失效
             var unlockCache = struct {
                 mu           sync.RWMutex
                 data         gin.H
                 at           time.Time
                 stateUpdated time.Time
+                domainCount  int
+                activeUsers  int
             }{}
 
             workflow.GET("/unlock-status", func(c *gin.Context) {
                 // 获取当前状态，用于与缓存对比
                 state := workflowService.GetCurrentState()
+                // 当前域名/用户计数（用于缓存失效）
+                domains, _ := domainService.ListDomains()
+                users, _ := userService.ListUsers()
+                curDomainCount := len(domains)
+                curActiveUsers := 0
+                for _, u := range users { if u.Active { curActiveUsers++ } }
 
                 // 尝试返回缓存：缓存时间在5分钟内，且缓存对应的状态更新时间不早于当前状态
                 unlockCache.mu.RLock()
-                if !unlockCache.at.IsZero() && time.Since(unlockCache.at) < 5*time.Minute && unlockCache.data != nil && !state.LastUpdated.After(unlockCache.stateUpdated) {
+                if !unlockCache.at.IsZero() && time.Since(unlockCache.at) < 5*time.Minute && unlockCache.data != nil &&
+                   !state.LastUpdated.After(unlockCache.stateUpdated) &&
+                   unlockCache.domainCount == curDomainCount && unlockCache.activeUsers == curActiveUsers {
                     c.Header("Cache-Control", "public, max-age=300")
                     c.Header("X-Cache", "HIT")
                     c.JSON(http.StatusOK, unlockCache.data)
@@ -336,19 +346,15 @@ func SetupRouter(
                 }
                 unlockCache.mu.RUnlock()
 
-                // 计算最新状态（仅基于工作流与域名，避免重度系统调用导致阻塞）
+                // 计算最新状态（仅基于工作流与域名/用户，避免重度系统调用导致阻塞）
                 systemInit := containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2
-                hasUsers := false
-                if users, err := userService.ListUsers(); err == nil {
-                    for _, u := range users {
-                        if u.Active { hasUsers = true; break }
-                    }
-                }
+                hasDomains := curDomainCount > 0
+                hasUsers := curActiveUsers > 0
                 unlockStatus := map[string]bool{
                     "system_init":    systemInit,
                     "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
-                    "ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
-                    "user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
+                    "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
+                    "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
                     "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
                     "mail_service":   hasUsers || containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 6,
                     "setup_complete": state.IsSetupComplete,
@@ -365,6 +371,8 @@ func SetupRouter(
                 unlockCache.data = resp
                 unlockCache.at = time.Now()
                 unlockCache.stateUpdated = state.LastUpdated
+                unlockCache.domainCount = curDomainCount
+                unlockCache.activeUsers = curActiveUsers
                 unlockCache.mu.Unlock()
 
                 c.Header("Cache-Control", "public, max-age=300")
