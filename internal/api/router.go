@@ -1,18 +1,16 @@
 package api
 
 import (
-	"esemail/internal/config"
-	"esemail/internal/middleware"
-	"esemail/internal/service"
-	"fmt"
-	"html/template"
-	"net/http"
-	"os"
-	"path/filepath"
-    "sync"
-    "time"
+    "esemail/internal/config"
+    "esemail/internal/middleware"
+    "esemail/internal/service"
+    "fmt"
+    "html/template"
+    "net/http"
+    "os"
+    "path/filepath"
 
-	"github.com/gin-gonic/gin"
+    "github.com/gin-gonic/gin"
 )
 
 // WorkflowStepWithState 扩展WorkflowStep结构以包含运行时状态
