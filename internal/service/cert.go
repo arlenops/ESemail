@@ -490,16 +490,21 @@ func (s *CertService) installCertificate(domain string, cert *certificate.Resour
 		return fmt.Errorf("保存证书文件失败: %v", err)
 	}
 
-	// 保存私钥文件
-	keyFile := filepath.Join(certDir, "private.key")
-	err = os.WriteFile(keyFile, cert.PrivateKey, 0600)
-	if err != nil {
-		return fmt.Errorf("保存私钥文件失败: %v", err)
-	}
+    // 保存私钥文件
+    keyFile := filepath.Join(certDir, "private.key")
+    err = os.WriteFile(keyFile, cert.PrivateKey, 0600)
+    if err != nil {
+        return fmt.Errorf("保存私钥文件失败: %v", err)
+    }
 
     log.Printf("INFO: 证书安装成功，域名: %s, 路径: %s", domain, certDir)
     if s.onInstalled != nil {
         go s.onInstalled(domain)
+    }
+    // 安全重载服务以应用新证书
+    if s.security != nil {
+        _ , _ = s.security.ExecuteSecureCommand("systemctl", []string{"reload", "postfix"}, 10*time.Second)
+        _ , _ = s.security.ExecuteSecureCommand("systemctl", []string{"reload", "dovecot"}, 10*time.Second)
     }
     return nil
 }

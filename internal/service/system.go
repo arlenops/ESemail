@@ -445,7 +445,11 @@ func (s *SystemService) verifyServicesStep() error {
 }
 
 func (s *SystemService) generatePostfixMainConfig(setupData *SetupConfig) string {
-	return fmt.Sprintf(`myhostname = %s
+    mailHost := setupData.Hostname
+    if mailHost == "" {
+        mailHost = fmt.Sprintf("mail.%s", setupData.Domain)
+    }
+    return fmt.Sprintf(`myhostname = %s
 mydomain = %s
 myorigin = $mydomain
 inet_interfaces = all
@@ -465,7 +469,7 @@ compatibility_level = 2
 
 # TLS 配置
 smtpd_tls_cert_file = /etc/ssl/mail/%s/fullchain.pem
-smtpd_tls_key_file = /etc/ssl/mail/%s/privkey.pem
+smtpd_tls_key_file = /etc/ssl/mail/%s/private.key
 smtpd_use_tls = yes
 smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
@@ -486,7 +490,7 @@ virtual_mailbox_maps = hash:/etc/postfix/vmailbox
 virtual_mailbox_base = /var/mail/vhosts
 virtual_uid_maps = static:5000
 virtual_gid_maps = static:5000
-`, setupData.Hostname, setupData.Domain, setupData.Domain, setupData.Domain)
+`, mailHost, setupData.Domain, mailHost, mailHost)
 }
 
 func (s *SystemService) generatePostfixMasterConfig() string {
@@ -541,14 +545,18 @@ scache    unix  -       -       y       -       1       scache
 }
 
 func (s *SystemService) generateDovecotConfig(setupData *SetupConfig) string {
-	return `# Dovecot 配置文件
+    mailHost := setupData.Hostname
+    if mailHost == "" {
+        mailHost = fmt.Sprintf("mail.%s", setupData.Domain)
+    }
+    return fmt.Sprintf(`# Dovecot 配置文件
 protocols = imap pop3 lmtp
 listen = *
 
 # SSL 配置 - 使用系统默认证书
 ssl = yes
-ssl_cert = </etc/ssl/certs/ssl-cert-snakeoil.pem
-ssl_key = </etc/ssl/private/ssl-cert-snakeoil.key
+ssl_cert = </etc/ssl/mail/%s/fullchain.pem
+ssl_key = </etc/ssl/mail/%s/private.key
 
 # 邮件存储配置
 mail_location = maildir:/var/mail/vhosts/%d/%n
@@ -578,7 +586,8 @@ service imap-login {
   inet_listener imaps {
     port = 993
     ssl = yes
-  }
+}
+`, mailHost, mailHost)
 }
 
 # POP3 服务配置

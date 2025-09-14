@@ -1,9 +1,10 @@
 package api
 
 import (
-	"esemail/internal/service"
-	"net/http"
-	"time"
+    "esemail/internal/service"
+    "net/http"
+    "time"
+    "strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -124,9 +125,14 @@ func (h *DomainHandler) VerifyDNSRecords(c *gin.Context) {
 // RequestSSLCertificate 申请SSL证书
 func (h *DomainHandler) RequestSSLCertificate(c *gin.Context) {
     domain := c.Param("domain")
+    // 证书面向邮件主机名，若传入根域名则自动转为 mail.<domain>
+    normalized := domain
+    if !strings.HasPrefix(strings.ToLower(normalized), "mail.") {
+        normalized = "mail." + normalized
+    }
 
     // 改为调用证书服务发起DNS-01挑战
-    result, err := h.certService.IssueDNSCert(domain)
+    result, err := h.certService.IssueDNSCert(normalized)
     if err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{
             "success": false,
@@ -139,7 +145,7 @@ func (h *DomainHandler) RequestSSLCertificate(c *gin.Context) {
         resp := gin.H{
             "success": true,
             "message": result.Message,
-            "domain":  domain,
+            "domain":  normalized,
         }
         if result.DNSName != "" {
             resp["dns_name"] = result.DNSName
