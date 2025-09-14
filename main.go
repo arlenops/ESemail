@@ -6,6 +6,7 @@ import (
     "esemail/internal/service"
     "esemail/internal/storage"
     "log"
+    "time"
 )
 
 func main() {
@@ -48,8 +49,16 @@ func main() {
     environmentService := service.NewEnvironmentService()
     dnsService := service.NewDNSService()
 	
-	// 初始化工作流服务
-	workflowService := service.NewWorkflowService(dataDir)
+    // 初始化工作流服务
+    workflowService := service.NewWorkflowService(dataDir)
+    // 证书安装完成后，推进工作流到步骤3（SSL/TLS证书配置）
+    certService.SetOnInstalled(func(domain string) {
+        if err := workflowService.CompleteStep(3); err != nil {
+            log.Printf("WARN: 完成工作流步骤3失败: %v", err)
+        } else {
+            log.Printf("INFO: 证书安装完成，已推进工作流到步骤3")
+        }
+    })
 	
 	// 初始化邮件服务器
 	mailServerConfig := &service.MailServerConfig{
@@ -104,7 +113,17 @@ func main() {
         settingsService,
     )
 
-	log.Printf("ESemail 控制面启动在端口 :%s", cfg.Server.Port)
+    // 启动健康检查定时器（每5分钟），用于周期性检查
+    go func() {
+        ticker := time.NewTicker(5 * time.Minute)
+        defer ticker.Stop()
+        for range ticker.C {
+            st := systemService.GetSystemStatus()
+            log.Printf("HEALTH: initialized=%v services=%v", st.Initialized, st.ServicesStatus)
+        }
+    }()
+
+    log.Printf("ESemail 控制面启动在端口 :%s", cfg.Server.Port)
 	if err := router.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("服务启动失败: %v", err)
 	}

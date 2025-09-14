@@ -8,13 +8,15 @@ import (
 )
 
 type UserHandler struct {
-	userService *service.UserService
+    userService *service.UserService
+    workflowService *service.WorkflowService
 }
 
-func NewUserHandler(userService *service.UserService) *UserHandler {
-	return &UserHandler{
-		userService: userService,
-	}
+func NewUserHandler(userService *service.UserService, workflowService *service.WorkflowService) *UserHandler {
+    return &UserHandler{
+        userService: userService,
+        workflowService: workflowService,
+    }
 }
 
 func (h *UserHandler) ListUsers(c *gin.Context) {
@@ -34,13 +36,20 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
-	user, err := h.userService.CreateUser(req)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+    user, err := h.userService.CreateUser(req)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
 
-	c.JSON(http.StatusCreated, user)
+    // 用户创建成功后，推进工作流到步骤4
+    if h.workflowService != nil {
+        if err := h.workflowService.CompleteStep(4); err != nil {
+            c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
+        }
+    }
+
+    c.JSON(http.StatusCreated, user)
 }
 
 func (h *UserHandler) UpdateUser(c *gin.Context) {

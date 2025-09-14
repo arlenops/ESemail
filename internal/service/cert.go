@@ -24,12 +24,13 @@ import (
 
 // CertService 使用Lego ACME客户端的证书服务
 type CertService struct {
-	config            *config.CertConfig
-	legoClient        *lego.Client
-	user              *LegoUser
-	pendingChallenges map[string]*LegoDNSChallenge
-	pendingFilePath   string
-	security          *SecurityService
+    config            *config.CertConfig
+    legoClient        *lego.Client
+    user              *LegoUser
+    pendingChallenges map[string]*LegoDNSChallenge
+    pendingFilePath   string
+    security          *SecurityService
+    onInstalled       func(domain string)
 }
 
 // LegoUser 实现lego.User接口
@@ -159,6 +160,11 @@ func NewCertService(config *config.CertConfig) (*CertService, error) {
 	}
 
 	return service, nil
+}
+
+// SetOnInstalled 设置证书安装完成回调
+func (s *CertService) SetOnInstalled(cb func(domain string)) {
+    s.onInstalled = cb
 }
 
 // initializeClient 初始化Lego客户端
@@ -491,8 +497,11 @@ func (s *CertService) installCertificate(domain string, cert *certificate.Resour
 		return fmt.Errorf("保存私钥文件失败: %v", err)
 	}
 
-	log.Printf("INFO: 证书安装成功，域名: %s, 路径: %s", domain, certDir)
-	return nil
+    log.Printf("INFO: 证书安装成功，域名: %s, 路径: %s", domain, certDir)
+    if s.onInstalled != nil {
+        go s.onInstalled(domain)
+    }
+    return nil
 }
 
 // ListCertificates 列出所有证书

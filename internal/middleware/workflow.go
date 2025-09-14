@@ -55,9 +55,8 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 				return
 			}
         } else if strings.HasPrefix(path, "/api/v1/certificates") {
-            // 放宽：有域名或已到步骤3即可访问
-            // 由于中间件无法访问domainService，这里以工作流进度为准：到达步骤2（完成域名添加）即可
-            if state.CurrentStep < 3 && state.CurrentStep < 2 {
+            // 放宽：完成域名添加（步骤>=2）即可访问
+            if state.CurrentStep < 2 {
                 c.JSON(http.StatusLocked, gin.H{
                     "success": false,
                     "error":   "功能未解锁",

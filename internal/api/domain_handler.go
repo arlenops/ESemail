@@ -136,13 +136,6 @@ func (h *DomainHandler) RequestSSLCertificate(c *gin.Context) {
     }
 
     if result.Success {
-        // SSL证书申请触发后，推进工作流到步骤3（SSL/TLS证书配置）
-        if h.workflowService != nil {
-            if err := h.workflowService.CompleteStep(3); err != nil {
-                c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
-            }
-        }
-
         resp := gin.H{
             "success": true,
             "message": result.Message,

@@ -337,17 +337,19 @@ func SetupRouter(
 
                 // 计算最新状态（仅基于工作流与域名，避免重度系统调用导致阻塞）
                 systemInit := containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2
-                hasDomains := false
-                if domains, err := domainService.ListDomains(); err == nil && len(domains) > 0 {
-                    hasDomains = true
+                hasUsers := false
+                if users, err := userService.ListUsers(); err == nil {
+                    for _, u := range users {
+                        if u.Active { hasUsers = true; break }
+                    }
                 }
                 unlockStatus := map[string]bool{
                     "system_init":    systemInit,
                     "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
-                    "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
-                    "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
+                    "ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
+                    "user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
                     "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
-                    "mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6,
+                    "mail_service":   hasUsers || containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 6,
                     "setup_complete": state.IsSetupComplete,
                 }
 
@@ -405,14 +407,15 @@ func SetupRouter(
         }
 
 			// 用户管理
-			users := authenticated.Group("/users")
-			{
-				users.GET("", NewUserHandler(userService).ListUsers)
-				users.POST("", NewUserHandler(userService).CreateUser)
-				users.PUT("/:id", NewUserHandler(userService).UpdateUser)
-				users.DELETE("/:id", NewUserHandler(userService).DeleteUser)
-				users.POST("/:id/reset-password", NewUserHandler(userService).ResetPassword)
-			}
+            users := authenticated.Group("/users")
+            {
+                uh := NewUserHandler(userService, workflowService)
+                users.GET("", uh.ListUsers)
+                users.POST("", uh.CreateUser)
+                users.PUT("/:id", uh.UpdateUser)
+                users.DELETE("/:id", uh.DeleteUser)
+                users.POST("/:id/reset-password", uh.ResetPassword)
+            }
 
 			// 邮件服务和历史
 			mail := authenticated.Group("/mail")
@@ -433,6 +436,7 @@ func SetupRouter(
         certs := authenticated.Group("/certificates")
         {
             certHandler := NewCertHandler(certService)
+            certHandler.workflowService = workflowService
             certs.GET("", certHandler.ListCertificates)
             certs.POST("/issue", certHandler.IssueCertificate)
             certs.POST("/validate-dns/:domain", certHandler.ValidateDNS)
