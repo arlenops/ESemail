@@ -14,19 +14,70 @@
     <script src="/static/js/dashboard.js"></script>
     <script src="/static/js/mail.js"></script>
     <script>
-        // 安全兜底：如全局UI封装未加载，提供轻量降级实现避免报错
-        if (typeof window.showConfirm === 'undefined') {
-            window.showConfirm = (message, title, options) => {
-                const text = (title ? (title + '\n\n') : '') + (typeof message === 'string' ? message : '');
-                return Promise.resolve(window.confirm(text));
-            };
-        }
-        if (typeof window.showAlert === 'undefined') {
-            window.showAlert = (message, title, type) => {
-                const text = (title ? (title + '\n\n') : '') + (message || '');
-                alert(text);
-            };
-        }
+        // 安全兜底：如 notification.js 未加载，使用Bootstrap模态框实现确认/提示，避免原生弹窗
+        (function(){
+            function bootstrapConfirm(message, title, options){
+                return new Promise((resolve)=>{
+                    const modalId = 'polyfill-modal-' + Date.now();
+                    const isHtml = options && options.html === true;
+                    const body = isHtml ? message : `<p class="mb-0">${(message || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`;
+                    const danger = options && options.dangerConfirm;
+                    const html = `
+                      <div class="modal fade" id="${modalId}" tabindex="-1">
+                        <div class="modal-dialog modal-dialog-centered">
+                          <div class="modal-content">
+                            <div class="modal-header">
+                              <h5 class="modal-title">${title || '确认操作'}</h5>
+                              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">${body}</div>
+                            <div class="modal-footer">
+                              <button type="button" class="btn btn-secondary" data-action="cancel">取消</button>
+                              <button type="button" class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-action="ok">确认</button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>`;
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = html;
+                    document.body.appendChild(wrapper);
+                    const modalEl = wrapper.firstElementChild;
+                    const modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                    modalEl.querySelector('[data-action="cancel"]').addEventListener('click', ()=>{ modal.hide(); resolve(false); });
+                    modalEl.querySelector('[data-action="ok"]').addEventListener('click', ()=>{ modal.hide(); resolve(true); });
+                    modalEl.addEventListener('hidden.bs.modal', ()=>{ wrapper.remove(); });
+                });
+            }
+            function bootstrapAlert(message, title){
+                const modalId = 'polyfill-alert-' + Date.now();
+                const html = `
+                  <div class="modal fade" id="${modalId}" tabindex="-1">
+                    <div class="modal-dialog modal-dialog-centered">
+                      <div class="modal-content">
+                        <div class="modal-header"><h5 class="modal-title">${title || '提示'}</h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body"><p class="mb-0">${(message || '').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p></div>
+                        <div class="modal-footer"><button type="button" class="btn btn-primary" data-bs-dismiss="modal">确定</button></div>
+                      </div>
+                    </div>
+                  </div>`;
+                const wrap = document.createElement('div');
+                wrap.innerHTML = html;
+                document.body.appendChild(wrap);
+                const modalEl = wrap.firstElementChild;
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+                modalEl.addEventListener('hidden.bs.modal', ()=>{ wrap.remove(); });
+            }
+            if (typeof window.showConfirm === 'undefined') {
+                window.showConfirm = bootstrapConfirm;
+            }
+            if (typeof window.showAlert === 'undefined') {
+                window.showAlert = bootstrapAlert;
+            }
+        })();
     </script>
     
     <style>

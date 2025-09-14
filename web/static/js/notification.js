@@ -46,30 +46,31 @@ class NotificationSystem {
     // 显示确认对话框
     showConfirm(message, title = '确认操作', options = {}) {
         return new Promise((resolve) => {
+            const isHtml = options && options.html === true;
+            const inner = isHtml
+                ? `${message}`
+                : `<p class="mb-0">${this.escapeHtml(String(message || ''))}</p>`;
+            const body = `
+                <div>
+                    <div class="text-center mb-2">
+                        <i class="fas fa-question-circle text-primary fa-3x"></i>
+                    </div>
+                    ${inner}
+                </div>
+            `;
             const modal = this.createModal({
                 title: title,
-                body: `
-                    <div class="text-center">
-                        <i class="fas fa-question-circle text-primary fa-3x mb-3"></i>
-                        <p class="mb-0">${message}</p>
-                    </div>
-                `,
+                body: body,
                 buttons: [
                     {
                         text: options.cancelText || '取消',
                         class: 'btn-secondary',
-                        action: () => {
-                            this.closeModal(modal);
-                            resolve(false);
-                        }
+                        action: () => { this.closeModal(modal); resolve(false); }
                     },
                     {
                         text: options.confirmText || '确认',
                         class: options.dangerConfirm ? 'btn-danger' : 'btn-primary',
-                        action: () => {
-                            this.closeModal(modal);
-                            resolve(true);
-                        }
+                        action: () => { this.closeModal(modal); resolve(true); }
                     }
                 ]
             });
