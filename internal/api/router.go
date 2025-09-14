@@ -305,54 +305,58 @@ func SetupRouter(
 			workflow.POST("/reset", workflowHandler.ResetWorkflow) // 仅用于开发测试
 
 			// 获取功能解锁状态
-			// 5分钟缓存，避免高频调用
-			var unlockCache = struct {
-				mu   sync.RWMutex
-				data gin.H
-				at   time.Time
-			}{}
+            // 5分钟缓存，避免高频调用；当工作流状态更新时立即失效
+            var unlockCache = struct {
+                mu           sync.RWMutex
+                data         gin.H
+                at           time.Time
+                stateUpdated time.Time
+            }{}
 
-			workflow.GET("/unlock-status", func(c *gin.Context) {
-				// 尝试返回缓存
-				unlockCache.mu.RLock()
-				if !unlockCache.at.IsZero() && time.Since(unlockCache.at) < 5*time.Minute && unlockCache.data != nil {
-					c.Header("Cache-Control", "public, max-age=300")
-					c.Header("X-Cache", "HIT")
-					c.JSON(http.StatusOK, unlockCache.data)
-					unlockCache.mu.RUnlock()
-					return
-				}
-				unlockCache.mu.RUnlock()
+            workflow.GET("/unlock-status", func(c *gin.Context) {
+                // 获取当前状态，用于与缓存对比
+                state := workflowService.GetCurrentState()
 
-				// 计算最新状态
-				state := workflowService.GetCurrentState()
-				initStatus := systemService.GetInitializationStatus()
-				unlockStatus := map[string]bool{
-					"system_init":    initStatus["is_initialized"].(bool),
-					"domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
-					"ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
-					"user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
-					"dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
-					"mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6,
-					"setup_complete": state.IsSetupComplete,
-				}
+                // 尝试返回缓存：缓存时间在5分钟内，且缓存对应的状态更新时间不早于当前状态
+                unlockCache.mu.RLock()
+                if !unlockCache.at.IsZero() && time.Since(unlockCache.at) < 5*time.Minute && unlockCache.data != nil && !state.LastUpdated.After(unlockCache.stateUpdated) {
+                    c.Header("Cache-Control", "public, max-age=300")
+                    c.Header("X-Cache", "HIT")
+                    c.JSON(http.StatusOK, unlockCache.data)
+                    unlockCache.mu.RUnlock()
+                    return
+                }
+                unlockCache.mu.RUnlock()
 
-				resp := gin.H{
-					"success": true,
-					"unlock_status": unlockStatus,
-					"workflow_state": state,
-				}
+                // 计算最新状态
+                initStatus := systemService.GetInitializationStatus()
+                unlockStatus := map[string]bool{
+                    "system_init":    initStatus["is_initialized"].(bool),
+                    "domain_config":  initStatus["is_initialized"].(bool) && (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
+                    "ssl_config":     containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
+                    "user_mgmt":      containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
+                    "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5,
+                    "mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6,
+                    "setup_complete": state.IsSetupComplete,
+                }
 
-				// 写入缓存
-				unlockCache.mu.Lock()
-				unlockCache.data = resp
-				unlockCache.at = time.Now()
-				unlockCache.mu.Unlock()
+                resp := gin.H{
+                    "success": true,
+                    "unlock_status": unlockStatus,
+                    "workflow_state": state,
+                }
 
-				c.Header("Cache-Control", "public, max-age=300")
-				c.Header("X-Cache", "MISS")
-				c.JSON(http.StatusOK, resp)
-			})
+                // 写入缓存
+                unlockCache.mu.Lock()
+                unlockCache.data = resp
+                unlockCache.at = time.Now()
+                unlockCache.stateUpdated = state.LastUpdated
+                unlockCache.mu.Unlock()
+
+                c.Header("Cache-Control", "public, max-age=300")
+                c.Header("X-Cache", "MISS")
+                c.JSON(http.StatusOK, resp)
+            })
 		}
 
 		// DNS检查（无需认证）
