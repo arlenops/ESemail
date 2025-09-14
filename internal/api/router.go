@@ -335,14 +335,14 @@ func SetupRouter(
                 }
                 unlockCache.mu.RUnlock()
 
-                // 计算最新状态（证书/用户管理：存在域名即可解锁）
-                initStatus := systemService.GetInitializationStatus()
+                // 计算最新状态（仅基于工作流与域名，避免重度系统调用导致阻塞）
+                systemInit := containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2
                 hasDomains := false
                 if domains, err := domainService.ListDomains(); err == nil && len(domains) > 0 {
                     hasDomains = true
                 }
                 unlockStatus := map[string]bool{
-                    "system_init":    initStatus["is_initialized"].(bool),
+                    "system_init":    systemInit,
                     "domain_config":  (containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
                     "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
                     "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
