@@ -13,6 +13,21 @@
     <script src="/static/js/notification.js"></script>
     <script src="/static/js/dashboard.js"></script>
     <script src="/static/js/mail.js"></script>
+    <script>
+        // 安全兜底：如全局UI封装未加载，提供轻量降级实现避免报错
+        if (typeof window.showConfirm === 'undefined') {
+            window.showConfirm = (message, title, options) => {
+                const text = (title ? (title + '\n\n') : '') + (typeof message === 'string' ? message : '');
+                return Promise.resolve(window.confirm(text));
+            };
+        }
+        if (typeof window.showAlert === 'undefined') {
+            window.showAlert = (message, title, type) => {
+                const text = (title ? (title + '\n\n') : '') + (message || '');
+                alert(text);
+            };
+        }
+    </script>
     
     <style>
         /* 修复模态框中下拉菜单被遮挡的问题 */
