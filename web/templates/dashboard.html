@@ -1721,13 +1721,29 @@
             }
         }
 
-        // 删除证书
+        // 删除证书（带UI确认，可复制信息）
         async function deleteCertificate(domain) {
-            if (!confirm(`确定要删除域名 ${domain} 的证书吗？此操作不可撤销。`)) {
-                return;
-            }
+            const html = `
+                <div class="mb-2">请确认要删除以下域名的证书：</div>
+                <pre class="bg-light p-2 border rounded small">${domain}</pre>
+                <div class="text-danger small">删除后将回退为系统默认证书（snakeoil），请尽快重新签发正式证书。</div>
+            `;
+            const ok = await showConfirm(html, '删除证书确认', { dangerConfirm: true, html: true });
+            if (!ok) return;
 
-            alert('删除证书功能将在后续版本中实现');
+            try {
+                const resp = await apiRequest(`/api/v1/certificates/${encodeURIComponent(domain)}`, { method: 'DELETE' });
+                if (resp.ok) {
+                    showAlert('证书已删除，服务将使用默认证书运行。', '操作成功', 'success');
+                    refreshCertificates();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    showAlert('删除证书失败: ' + (err.error || resp.statusText), '操作失败', 'error');
+                }
+            } catch (e) {
+                console.error('删除证书失败: ', e);
+                showAlert('删除证书失败: ' + e.message, '网络错误', 'error');
+            }
         }
 
         // 加载域名选项到证书表单
