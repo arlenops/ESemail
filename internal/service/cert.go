@@ -293,85 +293,58 @@ func (s *CertService) IssueDNSCert(domain string) (*LegoCertResponse, error) {
     // 确保客户端已初始化，统一从配置注入邮箱
     if s.legoClient == nil {
         if s.config.Email == "" || s.config.Email == "admin@example.com" || strings.Contains(s.config.Email, "example.") {
-            return &LegoCertResponse{
-                Success: false,
-                Error:   "证书服务未初始化，请在配置中设置有效邮箱 cert.email",
-            }, nil
+            return &LegoCertResponse{Success: false, Error: "证书服务未初始化，请在配置中设置有效邮箱 cert.email"}, nil
         }
         if err := s.initializeClient(); err != nil {
-            return &LegoCertResponse{
-                Success: false,
-                Error:   fmt.Sprintf("初始化证书客户端失败: %v", err),
-            }, nil
+            return &LegoCertResponse{Success: false, Error: fmt.Sprintf("初始化证书客户端失败: %v", err)}, nil
         }
     }
 
-	// 1. 创建证书请求
-	request := certificate.ObtainRequest{
-		Domains: []string{domain},
-		Bundle:  true,
-	}
+    // 构建请求
+    request := certificate.ObtainRequest{Domains: []string{domain}, Bundle: true}
 
-	// 2. 获取DNS挑战（这会触发manual provider的Present回调）
-	cert, err := s.legoClient.Certificate.Obtain(request)
-	if err != nil {
-		// 检查是否是手动DNS挑战错误
-		if strings.Contains(err.Error(), "manual_dns_required:") {
-			log.Printf("INFO: 检测到DNS手动验证错误，开始解析")
-
-			// 从错误信息中提取DNS信息
-			errorMsg := err.Error()
-			log.Printf("INFO: DNS错误消息: %s", errorMsg)
-
-			// 找到manual_dns_required的位置并提取后面的内容
-			index := strings.Index(errorMsg, "manual_dns_required:")
-            if index >= 0 {
-                content := errorMsg[index+len("manual_dns_required:"):]
-                log.Printf("INFO: DNS提取内容: %s", content)
-
-				// 分割DNS名称和值
-				parts := strings.SplitN(content, ":", 2)
-				log.Printf("INFO: DNS分割结果: %v", parts)
-
-				if len(parts) >= 2 {
-					dnsName := parts[0]
-					dnsValue := parts[1]
-					log.Printf("INFO: DNS解析结果 - name: %s, value: %s", dnsName, dnsValue)
-
-                    return &LegoCertResponse{
-                        Success:  true,
-                        DNSName:  dnsName,
-                        DNSValue: dnsValue,
-                        Message: fmt.Sprintf("请在DNS中添加以下TXT记录：\\n名称: %s\\n值: %s\\n\\n添加完成后，请调用完成验证接口。",
-                            dnsName, dnsValue),
-                        Debug: map[string]interface{}{
-                            "pending_file": s.pendingFilePath,
-                            "domain": domain,
-                            "normalized_domain": s.normalizeDomain(domain),
-                        },
-                    }, nil
-                }
-            }
+    // 异步发起签发流程（将触发 Present 记录挑战）
+    go func(d string, req certificate.ObtainRequest) {
+        cert, err := s.legoClient.Certificate.Obtain(req)
+        if err != nil {
+            log.Printf("WARNING: 证书申请异步流程返回错误(可能是手动模式或超时): %v", err)
+            return
         }
-		return &LegoCertResponse{
-			Success: false,
-			Error:   fmt.Sprintf("申请证书失败: %v", err),
-		}, nil
-	}
+        if err := s.installCertificate(d, cert); err != nil {
+            log.Printf("ERROR: 证书安装失败: %v", err)
+        }
+    }(domain, request)
 
-	// 3. 安装证书
-	err = s.installCertificate(domain, cert)
-	if err != nil {
-		return &LegoCertResponse{
-			Success: false,
-			Error:   fmt.Sprintf("证书申请成功但安装失败: %v", err),
-		}, nil
-	}
+    // 尝试在短时间内读取已记录的挑战，以便前端展示
+    start := time.Now()
+    for time.Since(start) < 5*time.Second {
+        if ch, ok := s.pendingChallenges[domain]; ok {
+            return &LegoCertResponse{
+                Success: true,
+                DNSName: ch.DNSName,
+                DNSValue: ch.DNSValue,
+                Message: "已发起DNS-01挑战，请添加以下TXT记录后等待验证自动完成。如超时，可点完成验证。",
+                Debug: map[string]interface{}{"pending_file": s.pendingFilePath, "domain": domain},
+            }, nil
+        }
+        if ch, ok := s.pendingChallenges[s.normalizeDomain(domain)]; ok {
+            return &LegoCertResponse{
+                Success: true,
+                DNSName: ch.DNSName,
+                DNSValue: ch.DNSValue,
+                Message: "已发起DNS-01挑战，请添加以下TXT记录后等待验证自动完成。如超时，可点完成验证。",
+                Debug: map[string]interface{}{"pending_file": s.pendingFilePath, "domain": domain},
+            }, nil
+        }
+        time.Sleep(200 * time.Millisecond)
+    }
 
-	return &LegoCertResponse{
-		Success: true,
-		Message: fmt.Sprintf("域名 %s 的SSL证书申请和安装成功", domain),
-	}, nil
+    // 若尚未拿到挑战，仍返回成功并提示前端稍后获取
+    return &LegoCertResponse{
+        Success: true,
+        Message: "已发起DNS-01挑战，正在获取挑战信息，请稍后刷新或查看挂起挑战列表。",
+        Debug: map[string]interface{}{"pending_file": s.pendingFilePath, "domain": domain},
+    }, nil
 }
 
 
