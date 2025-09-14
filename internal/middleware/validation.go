@@ -1,14 +1,15 @@
 package middleware
 
 import (
-	"bytes"
-	"esemail/internal/service"
-	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"strings"
-	"sync"
+    "bytes"
+    "esemail/internal/service"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+    "strings"
+    "sync"
+    "time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -97,37 +98,60 @@ func RequestValidationMiddleware(validationService *service.ValidationService) g
 
 // RateLimitMiddleware 简单的速率限制中间件
 func RateLimitMiddleware() gin.HandlerFunc {
-	// 存储每个IP的请求计数（实际项目中应使用Redis等外部存储）
-	requestCounts := make(map[string]int)
-	var mutex sync.RWMutex // 添加读写锁保护map
-	
-	return func(c *gin.Context) {
-		clientIP := c.ClientIP()
-		
-		// 使用读锁检查计数
-		mutex.RLock()
-		count, exists := requestCounts[clientIP]
-		mutex.RUnlock()
-		
-		if exists {
-			if count > 100 { // 每分钟最多100个请求
-				c.JSON(http.StatusTooManyRequests, gin.H{"error": "请求过于频繁"})
-				c.Abort()
-				return
-			}
-			// 使用写锁更新计数
-			mutex.Lock()
-			requestCounts[clientIP] = count + 1
-			mutex.Unlock()
-		} else {
-			// 使用写锁设置初始计数
-			mutex.Lock()
-			requestCounts[clientIP] = 1
-			mutex.Unlock()
-		}
-		
-		c.Next()
-	}
+    // 简易每分钟限流（本地内存）；生产建议置换为Redis/令牌桶
+    type rateInfo struct {
+        count   int
+        resetAt time.Time
+    }
+    store := make(map[string]*rateInfo)
+    var mu sync.Mutex
+
+    // 路径白名单（频繁轮询或只读）
+    skip := []string{
+        "/api/v1/workflow/unlock-status",
+        "/api/v1/health",
+        "/static/",
+    }
+
+    const limitPerMinute = 600 // 默认每IP每分钟600请求，避免误伤前端轮询
+
+    return func(c *gin.Context) {
+        path := c.Request.URL.Path
+        for _, p := range skip {
+            if strings.HasPrefix(path, p) {
+                c.Next()
+                return
+            }
+        }
+
+        ip := c.ClientIP()
+        now := time.Now()
+
+        mu.Lock()
+        info, ok := store[ip]
+        if !ok || now.After(info.resetAt) {
+            info = &rateInfo{count: 0, resetAt: now.Add(time.Minute)}
+            store[ip] = info
+        }
+        info.count++
+        remaining := limitPerMinute - info.count
+        resetIn := int(time.Until(info.resetAt).Seconds())
+        mu.Unlock()
+
+        // 附加标准限流头
+        c.Header("X-RateLimit-Limit", fmt.Sprintf("%d", limitPerMinute))
+        if remaining < 0 { remaining = 0 }
+        c.Header("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
+        c.Header("X-RateLimit-Reset", fmt.Sprintf("%d", resetIn))
+
+        if info.count > limitPerMinute {
+            c.JSON(http.StatusTooManyRequests, gin.H{"error": "请求过于频繁，请稍后再试"})
+            c.Abort()
+            return
+        }
+
+        c.Next()
+    }
 }
 
 // SecurityHeadersMiddleware 安全头部中间件
