@@ -42,49 +42,49 @@ func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFun
 		state := workflowService.GetCurrentState()
 		
 		// 根据步骤进度控制API访问 - 更新的步骤顺序
-		if strings.HasPrefix(path, "/api/v1/domains") {
-			// 域名管理需要系统初始化完成
-			if state.CurrentStep < 2 {
-				c.JSON(http.StatusLocked, gin.H{
-					"success": false,
-					"error":   "功能未解锁",
-					"message": "请先完成系统初始化",
-					"required_step": "系统初始化",
-				})
-				c.Abort()
-				return
-			}
-        } else if strings.HasPrefix(path, "/api/v1/certificates") {
-            // 放宽：完成域名添加（步骤>=2）即可访问
+        if strings.HasPrefix(path, "/api/v1/domains") {
+            // 域名管理：完成第1步（当前步>=2）
             if state.CurrentStep < 2 {
                 c.JSON(http.StatusLocked, gin.H{
                     "success": false,
                     "error":   "功能未解锁",
-                    "message": "请先添加域名",
+                    "message": "请先完成系统初始化",
+                    "required_step": "系统初始化",
+                })
+                c.Abort()
+                return
+            }
+        } else if strings.HasPrefix(path, "/api/v1/certificates") {
+            // 证书管理：完成第2步（当前步>=3）
+            if state.CurrentStep < 3 {
+                c.JSON(http.StatusLocked, gin.H{
+                    "success": false,
+                    "error":   "功能未解锁",
+                    "message": "请先完成域名配置",
                     "required_step": "域名配置",
                 })
                 c.Abort()
                 return
             }
         } else if strings.HasPrefix(path, "/api/v1/users") {
-            // 放宽：到达步骤2（有域名）即可访问
-            if state.CurrentStep < 2 {
+            // 用户管理：完成第3步（当前步>=4）
+            if state.CurrentStep < 4 {
                 c.JSON(http.StatusLocked, gin.H{
                     "success": false,
                     "error":   "功能未解锁",
-                    "message": "请先添加域名",
-                    "required_step": "域名配置",
+                    "message": "请先完成证书配置",
+                    "required_step": "SSL证书配置",
                 })
                 c.Abort()
                 return
             }
         } else if strings.HasPrefix(path, "/api/v1/mail") {
-            // 邮件服务需要用户管理完成（步骤6）
-            if state.CurrentStep < 6 {
+            // 邮件服务：完成第4步（当前步>=5）
+            if state.CurrentStep < 5 {
                 c.JSON(http.StatusLocked, gin.H{
                     "success": false,
                     "error":   "功能未解锁",
-                    "message": "请先完成用户管理和SSL证书配置",
+                    "message": "请先完成用户管理",
                     "required_step": "用户管理",
                 })
                 c.Abort()
