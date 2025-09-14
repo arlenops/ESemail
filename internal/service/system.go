@@ -549,14 +549,24 @@ func (s *SystemService) generateDovecotConfig(setupData *SetupConfig) string {
     if mailHost == "" {
         mailHost = fmt.Sprintf("mail.%s", setupData.Domain)
     }
+    certPath := fmt.Sprintf("/etc/ssl/mail/%s/fullchain.pem", mailHost)
+    keyPath := fmt.Sprintf("/etc/ssl/mail/%s/private.key", mailHost)
+    // 如果证书不存在，回退到系统默认 snakeoil，避免服务启动失败
+    if _, err := os.Stat(certPath); err != nil {
+        certPath = "/etc/ssl/certs/ssl-cert-snakeoil.pem"
+    }
+    if _, err := os.Stat(keyPath); err != nil {
+        keyPath = "/etc/ssl/private/ssl-cert-snakeoil.key"
+    }
+
     return fmt.Sprintf(`# Dovecot 配置文件
 protocols = imap pop3 lmtp
 listen = *
 
 # SSL 配置
 ssl = yes
-ssl_cert = </etc/ssl/mail/%s/fullchain.pem
-ssl_key = </etc/ssl/mail/%s/private.key
+ssl_cert = <%s
+ssl_key = <%s
 
 # 邮件存储配置
 mail_location = maildir:/var/mail/vhosts/%%d/%%n
@@ -620,7 +630,7 @@ namespace inbox {
     special_use = \Trash
   }
 }
-`, mailHost, mailHost)
+`, certPath, keyPath)
 }
 
 func (s *SystemService) generateRspamdConfig() string {
