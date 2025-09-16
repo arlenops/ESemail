@@ -748,49 +748,10 @@
                 });
                 modal.show();
             }
-            
-            const navLinks = document.querySelectorAll('.sidebar .nav-link');
-            const sections = document.querySelectorAll('.section-content');
 
-            navLinks.forEach(link => {
-                link.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    
-                    // 更新导航状态
-                    navLinks.forEach(l => l.classList.remove('active'));
-                    this.classList.add('active');
-                    
-                    // 显示对应页面
-                    const targetSection = this.getAttribute('data-section') + '-section';
-                    sections.forEach(section => {
-                        section.style.display = 'none';
-                    });
-                    
-                    const target = document.getElementById(targetSection);
-                    if (target) {
-                        target.style.display = 'block';
-                        target.classList.add('fade-in-up');
-                    }
-                    
-                    // 根据不同页面加载对应数据
-                    if (targetSection === 'dashboard-section') {
-                        loadDashboardData();
-                    } else if (targetSection === 'domains-section') {
-                        loadDomains();
-                    } else if (targetSection === 'users-section') {
-                        loadUsers();
-                        loadDomainsForUserForm();
-                    } else if (targetSection === 'mail-section') {
-                        loadUserEmailOptions();
-                    } else if (targetSection === 'certificates-section') {
-                        loadCertificates();
-                    }
-                });
-            });
-            
             // 初始化加载数据
             loadDashboardData();
-            
+
             // 设置自动刷新
             setInterval(function() {
                 if (document.getElementById('dashboard-section').style.display !== 'none') {
