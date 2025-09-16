@@ -178,43 +178,27 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.domain_config}}disabled{{end}}"
-                               href="{{if .unlock_status.domain_config}}#domains{{else}}javascript:void(0){{end}}"
-                               data-section="{{if .unlock_status.domain_config}}domains{{else}}locked{{end}}"
-                               {{if not .unlock_status.domain_config}}onclick="showLockMessage('域名管理', '系统初始化')"{{end}}>
+                            <a class="nav-link" href="#domains" data-section="domains">
                                 <i class="fas fa-globe"></i>
                                 域名管理
-                                {{if not .unlock_status.domain_config}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.ssl_config}}disabled{{end}}"
-                               href="{{if .unlock_status.ssl_config}}#certificates{{else}}javascript:void(0){{end}}"
-                               data-section="{{if .unlock_status.ssl_config}}certificates{{else}}locked{{end}}"
-                               {{if not .unlock_status.ssl_config}}onclick="showLockMessage('证书管理', 'DNS验证')"{{end}}>
+                            <a class="nav-link" href="#certificates" data-section="certificates">
                                 <i class="fas fa-shield-alt"></i>
                                 证书管理
-                                {{if not .unlock_status.ssl_config}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.user_mgmt}}disabled{{end}}"
-                               href="{{if .unlock_status.user_mgmt}}#users{{else}}javascript:void(0){{end}}"
-                               data-section="{{if .unlock_status.user_mgmt}}users{{else}}locked{{end}}"
-                               {{if not .unlock_status.user_mgmt}}onclick="showLockMessage('用户管理', 'SSL证书配置')"{{end}}>
+                            <a class="nav-link" href="#users" data-section="users">
                                 <i class="fas fa-users"></i>
                                 用户管理
-                                {{if not .unlock_status.user_mgmt}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {{if not .unlock_status.mail_service}}disabled{{end}}"
-                               href="{{if .unlock_status.mail_service}}#mail{{else}}javascript:void(0){{end}}"
-                               data-section="{{if .unlock_status.mail_service}}mail{{else}}locked{{end}}"
-                               {{if not .unlock_status.mail_service}}onclick="showLockMessage('邮件服务', '用户管理')"{{end}}>
+                            <a class="nav-link" href="#mail" data-section="mail">
                                 <i class="fas fa-envelope"></i>
                                 邮件历史
-                                {{if not .unlock_status.mail_service}}<i class="fas fa-lock ms-1 text-muted"></i>{{end}}
                             </a>
                         </li>
                         <li class="nav-item">
@@ -317,30 +301,17 @@
                             <div class="card">
                                 <div class="card-header">
                                     <i class="fas fa-rocket"></i> 系统初始化
-                                    {{if .unlock_status.system_init}}
+                                    {{if .is_initialized}}
                                         <span class="badge bg-success float-end">已完成</span>
                                     {{else}}
                                         <span class="badge bg-warning float-end">待完成</span>
                                     {{end}}
                                 </div>
                                 <div class="card-body">
-                                    {{if .unlock_status.system_init}}
+                                    {{if .is_initialized}}
                                         <p class="text-muted mb-3">✅ 系统已成功初始化，邮件服务已准备就绪</p>
                                         <div class="alert alert-success">
-                                            <strong>下一步：</strong> 
-                                            {{if not .unlock_status.domain_config}}
-                                                前往域名管理配置您的第一个邮件域名
-                                            {{else if not .unlock_status.dns_verified}}
-                                                完成DNS解析验证
-                                            {{else if not .unlock_status.ssl_config}}
-                                                配置SSL证书
-                                            {{else if not .unlock_status.user_mgmt}}
-                                                创建第一个邮件用户
-                                            {{else if not .unlock_status.mail_service}}
-                                                启用邮件服务功能
-                                            {{else}}
-                                                所有设置已完成！🎉
-                                            {{end}}
+                                            <strong>系统已就绪：</strong> 所有功能模块现在都可以使用了！🎉
                                         </div>
                                     {{else}}
                                         <p class="text-muted mb-3">首次使用或重新配置系统时，请执行系统初始化以设置所有邮件服务。</p>
@@ -768,12 +739,7 @@
             if (!(await checkAuth())) {
                 return;
             }
-            
-            // 显示功能锁定消息的函数
-            window.showLockMessage = function(feature, requiredStep) {
-                alert(`⚠️ ${feature}功能尚未解锁\n\n请先完成：${requiredStep}`);
-            }
-            
+
             // 检查是否需要显示初始化弹窗
             if ({{if not .is_initialized}}true{{else}}false{{end}}) {
                 const modal = new bootstrap.Modal(document.getElementById('system-init-modal'), {
