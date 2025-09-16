@@ -1,5 +1,26 @@
 // 邮件管理相关功能
 
+// 认证请求助手函数
+async function authenticatedFetch(url, options = {}) {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+        showError('认证已过期，请重新登录');
+        window.location.href = '/login';
+        throw new Error('No auth token');
+    }
+
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+        ...(options.headers || {})
+    };
+
+    return fetch(url, {
+        ...options,
+        headers
+    });
+}
+
 // 全局变量
 let mailHistory = [];
 let currentPage = 1;
@@ -9,11 +30,11 @@ let pageSize = 50;
 async function refreshMailHistory() {
     const tbody = document.getElementById('mail-history-body');
     tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> 加载中...</td></tr>';
-    
+
     try {
-        const response = await fetch('/api/v1/mail/history?page=' + currentPage + '&page_size=' + pageSize);
+        const response = await authenticatedFetch('/api/v1/mail/history?page=' + currentPage + '&page_size=' + pageSize);
         const data = await response.json();
-        
+
         if (data.success) {
             displayMailHistory(data.data);
         } else {
@@ -139,11 +160,8 @@ async function sendMail(event) {
     submitBtn.disabled = true;
     
     try {
-        const response = await fetch('/api/v1/mail/send', {
+        const response = await authenticatedFetch('/api/v1/mail/send', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
             body: JSON.stringify(mailData)
         });
         
@@ -177,9 +195,9 @@ function clearMailForm() {
 // 查看邮件详情
 async function viewMailDetail(messageId) {
     try {
-        const response = await fetch(`/api/v1/mail/history/${messageId}`);
+        const response = await authenticatedFetch(`/api/v1/mail/history/${messageId}`);
         const data = await response.json();
-        
+
         if (data.success) {
             showMailDetailModal(data.data);
         } else {
@@ -193,8 +211,15 @@ async function viewMailDetail(messageId) {
 
 // 下载EML文件
 function downloadEML(messageId) {
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+        showError('认证已过期，请重新登录');
+        window.location.href = '/login';
+        return;
+    }
+
     const link = document.createElement('a');
-    link.href = `/api/v1/mail/history/${messageId}/download`;
+    link.href = `/api/v1/mail/history/${messageId}/download?token=${token}`;
     link.download = `mail_${messageId}.eml`;
     document.body.appendChild(link);
     link.click();
@@ -204,9 +229,9 @@ function downloadEML(messageId) {
 // 获取邮件服务器状态
 async function getMailServerStatus() {
     try {
-        const response = await fetch('/api/v1/mail/status');
+        const response = await authenticatedFetch('/api/v1/mail/status');
         const data = await response.json();
-        
+
         if (data.success) {
             displayMailServerStatus(data.data);
         } else {

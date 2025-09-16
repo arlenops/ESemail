@@ -155,25 +155,15 @@ func SetupRouter(
 		// 检查系统是否已初始化
 		initStatus := systemService.GetInitializationStatus()
 
-        // 计算功能解锁状态 - 更新的步骤顺序（对证书/用户管理更宽松：有域名即可解锁）
-            hasDomains := false
-            if domains, err := domainService.ListDomains(); err == nil && len(domains) > 0 {
-                hasDomains = true
-            }
-            // 兼容：初始化完成但工作流未及时持久化时，仍立即解锁
-            systemSetup := setupService.IsSystemSetup()
+        // 简化：系统初始化完成后，所有功能都解锁
             unlockStatus := map[string]bool{
-                // 使用Setup完成标志作为系统初始化的快速判断
-                "system_init":    systemSetup,
-                // 域名管理解锁：系统初始化已完成 或 工作流到达第2步
-                "domain_config":  (systemSetup || containsInt(state.CompletedSteps, 1) || state.CurrentStep >= 2),
-                // 证书管理：存在域名即可解锁（或已到步骤3）
-                "ssl_config":     hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 3,
-                // 用户管理：存在域名即可解锁（或已到步骤4）
-                "user_mgmt":      hasDomains || containsInt(state.CompletedSteps, 2) || state.CurrentStep >= 4,
-                "dns_verified":   containsInt(state.CompletedSteps, 4) || state.CurrentStep >= 5, // DNS验证在步骤5
-                "mail_service":   containsInt(state.CompletedSteps, 5) || state.CurrentStep >= 6, // 邮件服务在步骤6，需要用户管理完成
-                "setup_complete": state.IsSetupComplete,
+                "system_init":    true,
+                "domain_config":  true,
+                "ssl_config":     true,
+                "user_mgmt":      true,
+                "dns_verified":   true,
+                "mail_service":   true,
+                "setup_complete": true,
             }
 
 		c.HTML(http.StatusOK, "dashboard.html", gin.H{
@@ -313,26 +303,6 @@ func SetupRouter(
 			workflow.GET("/check/:id", workflowHandler.CheckStepRequirements)
 			workflow.POST("/reset", workflowHandler.ResetWorkflow) // 仅用于开发测试
 
-			// 获取功能解锁状态
-            workflow.GET("/unlock-status", func(c *gin.Context) {
-                // 简化：仅依据工作流步骤，实时返回，无缓存
-                state := workflowService.GetCurrentState()
-                unlock := map[string]bool{
-                    "system_init":    containsInt(state.CompletedSteps, 1),
-                    "domain_config":  containsInt(state.CompletedSteps, 1),
-                    "ssl_config":     containsInt(state.CompletedSteps, 2),
-                    "user_mgmt":      containsInt(state.CompletedSteps, 3),
-                    "dns_verified":   containsInt(state.CompletedSteps, 4),
-                    "mail_service":   containsInt(state.CompletedSteps, 4),
-                    "setup_complete": state.IsSetupComplete,
-                }
-                c.Header("Cache-Control", "no-store")
-                c.JSON(http.StatusOK, gin.H{
-                    "success": true,
-                    "unlock_status": unlock,
-                    "workflow_state": state,
-                })
-            })
 		}
 
 		// DNS检查（无需认证）

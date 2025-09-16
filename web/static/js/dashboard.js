@@ -1,6 +1,5 @@
 let currentSection = 'dashboard';
 let healthData = null;
-let unlockStatus = {}; // 缓存解锁状态
 
 // 通用模态框函数
 function showModal(title, message, type = 'info', actions = []) {
@@ -75,32 +74,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
     initializeEventListeners();
     checkSystemStatus();
-    // 初始检查解锁状态
-    checkUnlockStatus().then(() => {
-        // 初次加载时更新导航
-        updateNavigationUI();
-    });
     // 定期刷新
     setInterval(refreshDashboard, 30000);
-    // 定期检查解锁状态
-    setInterval(checkUnlockStatus, 10000);
+    // 初始化导航系统
+    initializeNavigation();
 });
-
-// 强制更新解锁状态（用于重要操作后立即更新）
-async function forceUpdateUnlockStatus() {
-    try {
-        const response = await fetch('/api/v1/workflow/unlock-status');
-        const data = await response.json();
-
-        if (data.success) {
-            unlockStatus = data.unlock_status;
-            updateNavigationUI();
-            console.log('功能解锁状态已强制更新:', unlockStatus);
-        }
-    } catch (error) {
-        console.error('强制检查解锁状态失败:', error);
-    }
-}
 
 // 检查认证令牌
 function checkAuthToken() {
@@ -122,7 +100,7 @@ function initializeEventListeners() {
     document.getElementById('issue-cert-form').addEventListener('submit', issueCertificate);
 }
 
-function switchSection(section) {
+function showSection(section) {
     console.log('Switching to section:', section);
 
     // 移除所有导航链接的active状态
@@ -203,138 +181,32 @@ function showInitializationModal() {
     modal.show();
 }
 
-// 检查功能解锁状态
-async function checkUnlockStatus() {
-    try {
-        const response = await fetch('/api/v1/workflow/unlock-status');
-        const data = await response.json();
-
-        if (data.success) {
-            const newUnlockStatus = data.unlock_status;
-            // 检查状态是否有变化
-            if (JSON.stringify(newUnlockStatus) !== JSON.stringify(unlockStatus)) {
-                unlockStatus = newUnlockStatus;
-                updateNavigationUI();
-                console.log('功能解锁状态已更新:', unlockStatus);
-            }
-        }
-    } catch (error) {
-        console.error('检查解锁状态失败:', error);
-    }
-}
-
-// 更新导航UI
-function updateNavigationUI() {
+// 初始化导航系统
+function initializeNavigation() {
     const navLinks = document.querySelectorAll('.sidebar .nav-link');
 
     navLinks.forEach(link => {
-        const originalSection = link.getAttribute('data-section');
+        const section = link.getAttribute('data-section');
 
-        // 移除所有事件监听器
-        const newLink = link.cloneNode(true);
-        link.parentNode.replaceChild(newLink, link);
+        // 移除可能的禁用状态
+        link.classList.remove('disabled');
+        link.style.pointerEvents = '';
+        link.style.opacity = '';
 
-        // 重置样式和属性
-        newLink.classList.remove('disabled');
-        newLink.style.pointerEvents = '';
-        newLink.style.opacity = '';
+        // 为所有导航项添加点击事件
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
 
-        // 移除锁定图标
-        const lockIcon = newLink.querySelector('.fa-lock');
-        if (lockIcon) {
-            lockIcon.remove();
-        }
-
-        // 确定实际的section名称（去除locked状态）
-        let actualSection = originalSection;
-        if (originalSection === 'locked') {
-            // 根据链接内容判断实际section
-            const linkText = newLink.textContent.trim();
-            if (linkText.includes('域名管理')) actualSection = 'domains';
-            else if (linkText.includes('证书管理')) actualSection = 'certificates';
-            else if (linkText.includes('用户管理')) actualSection = 'users';
-            else if (linkText.includes('邮件历史')) actualSection = 'mail';
-        }
-
-        // 根据解锁状态更新
-        switch(actualSection) {
-            case 'domains':
-                updateSingleNavigation(newLink, 'domains', unlockStatus.domain_config, '域名管理', '系统初始化');
-                newLink.setAttribute('data-section', unlockStatus.domain_config ? 'domains' : 'locked');
-                break;
-            case 'certificates':
-                updateSingleNavigation(newLink, 'certificates', unlockStatus.ssl_config, '证书管理', '域名配置');
-                newLink.setAttribute('data-section', unlockStatus.ssl_config ? 'certificates' : 'locked');
-                break;
-            case 'users':
-                updateSingleNavigation(newLink, 'users', unlockStatus.user_mgmt, '用户管理', '域名配置');
-                newLink.setAttribute('data-section', unlockStatus.user_mgmt ? 'users' : 'locked');
-                break;
-            case 'mail':
-                updateSingleNavigation(newLink, 'mail', unlockStatus.mail_service, '邮件服务', '用户管理和SSL证书配置');
-                newLink.setAttribute('data-section', unlockStatus.mail_service ? 'mail' : 'locked');
-                break;
-            default:
-                // 对于其他导航项（如dashboard、system）保持可用
-                if (actualSection === 'dashboard' || actualSection === 'system') {
-                    newLink.href = '#' + actualSection;
-                    newLink.onclick = (e) => {
-                        e.preventDefault();
-                        switchSection(actualSection);
-                    };
+            // 检查是否需要认证
+            if (section !== 'dashboard' && section !== 'system') {
+                if (!checkAuthToken()) {
+                    return;
                 }
-        }
+            }
+
+            showSection(section);
+        });
     });
-}
-
-// 更新单个导航项
-function updateSingleNavigation(linkElement, section, isUnlocked, featureName, requiredStep) {
-    if (!isUnlocked) {
-        // 功能未解锁
-        linkElement.classList.add('disabled');
-        linkElement.href = 'javascript:void(0)';
-        linkElement.onclick = (e) => {
-            e.preventDefault();
-            showLockMessage(featureName, requiredStep);
-        };
-
-        // 添加锁定图标
-        const lockIcon = document.createElement('i');
-        lockIcon.className = 'fas fa-lock ms-1 text-muted';
-        linkElement.appendChild(lockIcon);
-    } else {
-        // 功能已解锁
-        linkElement.classList.remove('disabled');
-        linkElement.href = '#' + section;
-        linkElement.onclick = (e) => {
-            e.preventDefault();
-            switchSection(section);
-        };
-    }
-}
-
-// 显示功能锁定提示
-function showLockMessage(feature, requiredStep) {
-    const actions = [
-        {
-            text: '<i class="fas fa-arrow-right me-2"></i>前往工作流向导',
-            class: 'btn-primary',
-            onclick: 'window.location.href="/workflow"',
-            dismiss: true
-        },
-        {
-            text: '关闭',
-            class: 'btn-secondary',
-            dismiss: true
-        }
-    ];
-
-    showModal(
-        '功能未解锁',
-        `<h5>${feature} 功能尚未解锁</h5><p class="text-muted">请先完成：<strong>${requiredStep}</strong></p>`,
-        'warning',
-        actions
-    );
 }
 
 async function initializeSystem() {
@@ -365,10 +237,9 @@ async function initializeSystem() {
         });
         
         if (result.success) {
-            // 系统初始化成功后立即检查解锁状态
-            setTimeout(async () => {
-                await forceUpdateUnlockStatus();
-                showModal('系统初始化完成', '系统已成功初始化，现在可以开始配置域名和其他功能。', 'success');
+            // 系统初始化成功
+            setTimeout(() => {
+                showModal('系统初始化完成', '系统已成功初始化，现在可以使用所有功能模块。', 'success');
             }, 2000);
         } else {
             btn.disabled = false;
@@ -803,8 +674,6 @@ async function addDomain(e) {
             bootstrap.Modal.getInstance(document.getElementById('add-domain-modal')).hide();
             // 清空表单
             document.getElementById('add-domain-form').reset();
-            // 立即检查解锁状态
-            await forceUpdateUnlockStatus();
             // 重新加载域名列表
             loadDomains();
             // 显示DNS设置引导

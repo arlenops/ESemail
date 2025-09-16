@@ -42,13 +42,6 @@ func (h *UserHandler) CreateUser(c *gin.Context) {
         return
     }
 
-    // 用户创建成功后，推进工作流到步骤4
-    if h.workflowService != nil {
-        if err := h.workflowService.CompleteStep(4); err != nil {
-            c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
-        }
-    }
-
     c.JSON(http.StatusCreated, user)
 }
 

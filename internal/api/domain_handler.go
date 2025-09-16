@@ -47,14 +47,6 @@ func (h *DomainHandler) AddDomain(c *gin.Context) {
 		return
 	}
 
-	// 域名添加成功后，自动完成工作流第2步
-	if h.workflowService != nil {
-		if err := h.workflowService.CompleteStep(2); err != nil {
-			// 工作流步骤完成失败，但不影响域名添加结果
-			c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
-		}
-	}
-
 	c.JSON(http.StatusCreated, gin.H{"message": "域名添加成功"})
 }
 

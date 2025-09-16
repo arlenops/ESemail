@@ -9,91 +9,9 @@ import (
 )
 
 // WorkflowMiddleware 工作流程控制中间件
-func WorkflowMiddleware(workflowService *service.WorkflowService) gin.HandlerFunc {
-    return func(c *gin.Context) {
-		// 获取请求路径
-		path := c.Request.URL.Path
-		
-		// 始终允许的路径（不受工作流控制）
-		allowedPaths := []string{
-			"/",
-			"/login",
-			"/api/v1/auth/login",
-			"/api/v1/auth/logout", 
-			"/api/v1/health",
-			"/api/v1/workflow/",
-			"/api/v1/csrf-token",
-			"/api/v1/system/", // 系统初始化相关
-			"/api/v1/setup/",  // 系统设置相关
-			"/api/v1/environment/", // 环境检查
-			"/static/",
-			"/test", // 临时测试页面
-		}
-		
-		// 检查是否是始终允许的路径
-		for _, allowedPath := range allowedPaths {
-			if strings.HasPrefix(path, allowedPath) {
-				c.Next()
-				return
-			}
-		}
-		
-		// 获取工作流状态
-		state := workflowService.GetCurrentState()
-		
-		// 根据步骤进度控制API访问 - 更新的步骤顺序
-        if strings.HasPrefix(path, "/api/v1/domains") {
-            // 域名管理：完成第1步（当前步>=2）
-            if state.CurrentStep < 2 {
-                c.JSON(http.StatusLocked, gin.H{
-                    "success": false,
-                    "error":   "功能未解锁",
-                    "message": "请先完成系统初始化",
-                    "required_step": "系统初始化",
-                })
-                c.Abort()
-                return
-            }
-        } else if strings.HasPrefix(path, "/api/v1/certificates") {
-            // 证书管理：完成第2步（当前步>=3）
-            if state.CurrentStep < 3 {
-                c.JSON(http.StatusLocked, gin.H{
-                    "success": false,
-                    "error":   "功能未解锁",
-                    "message": "请先完成域名配置",
-                    "required_step": "域名配置",
-                })
-                c.Abort()
-                return
-            }
-        } else if strings.HasPrefix(path, "/api/v1/users") {
-            // 用户管理：完成第3步（当前步>=4）
-            if state.CurrentStep < 4 {
-                c.JSON(http.StatusLocked, gin.H{
-                    "success": false,
-                    "error":   "功能未解锁",
-                    "message": "请先完成证书配置",
-                    "required_step": "SSL证书配置",
-                })
-                c.Abort()
-                return
-            }
-        } else if strings.HasPrefix(path, "/api/v1/mail") {
-            // 邮件服务：完成第4步（当前步>=5）
-            if state.CurrentStep < 5 {
-                c.JSON(http.StatusLocked, gin.H{
-                    "success": false,
-                    "error":   "功能未解锁",
-                    "message": "请先完成用户管理",
-                    "required_step": "用户管理",
-                })
-                c.Abort()
-                return
-            }
-        }
-		
-		c.Next()
-	}
+// 取消工作流门禁：放开所有功能
+func WorkflowMiddleware(_ *service.WorkflowService) gin.HandlerFunc {
+    return func(c *gin.Context) { c.Next() }
 }
 
 // WorkflowRedirectMiddleware 工作流重定向中间件（用于页面）

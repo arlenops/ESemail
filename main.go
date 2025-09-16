@@ -51,14 +51,6 @@ func main() {
 	
     // 初始化工作流服务
     workflowService := service.NewWorkflowService(dataDir)
-    // 证书安装完成后，推进工作流到步骤3（SSL/TLS证书配置）
-    certService.SetOnInstalled(func(domain string) {
-        if err := workflowService.CompleteStep(3); err != nil {
-            log.Printf("WARN: 完成工作流步骤3失败: %v", err)
-        } else {
-            log.Printf("INFO: 证书安装完成，已推进工作流到步骤3")
-        }
-    })
 	
 	// 初始化邮件服务器
 	mailServerConfig := &service.MailServerConfig{

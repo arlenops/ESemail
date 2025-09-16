@@ -91,12 +91,6 @@ func (h *CertHandler) ValidateDNS(c *gin.Context) {
     }
 
     if result.Success {
-        // 证书验证并安装成功后推进工作流到步骤3
-        if h.workflowService != nil {
-            if err := h.workflowService.CompleteStep(3); err != nil {
-                c.Header("X-Workflow-Warning", "工作流步骤更新失败: "+err.Error())
-            }
-        }
         c.JSON(http.StatusOK, gin.H{
             "success": true,
             "message": result.Message,
