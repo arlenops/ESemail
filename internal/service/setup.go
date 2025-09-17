@@ -86,12 +86,12 @@ func (s *SetupService) ConfigureSystem(config SetupConfig) error {
 }
 
 func (s *SetupService) IsSystemSetup() bool {
-	_, err := os.Stat("./config/.setup_complete")
+	_, err := os.Stat("/opt/esemail/config/.setup_complete")
 	return err == nil
 }
 
 func (s *SetupService) LoadSetupData() *SetupConfig {
-	data, err := os.ReadFile("./config/setup.conf")
+	data, err := os.ReadFile("/opt/esemail/config/setup.conf")
 	if err != nil {
 		return nil
 	}
@@ -124,7 +124,7 @@ func (s *SetupService) LoadSetupData() *SetupConfig {
 }
 
 func (s *SetupService) saveSetupConfig(config SetupConfig) error {
-	os.MkdirAll("./config", 0755)
+	os.MkdirAll("/opt/esemail/config", 0755)
 
 	configContent := fmt.Sprintf(`DOMAIN=%s
 ADMIN_EMAIL=%s
@@ -134,7 +134,7 @@ SETUP_TIME=%s
 `, config.Domain, config.AdminEmail, config.Hostname, config.AdminName,
 		fmt.Sprintf("%d", os.Getpid()))
 
-	return os.WriteFile("./config/setup.conf", []byte(configContent), 0644)
+	return os.WriteFile("/opt/esemail/config/setup.conf", []byte(configContent), 0644)
 }
 
 func (s *SetupService) updateSystemConfig(config SetupConfig) error {
@@ -179,17 +179,17 @@ func (s *SetupService) updateConfigFile(filePath string, transformer func(string
 
 func (s *SetupService) updateDKIMConfig(domain string) error {
 	// 确保目录存在
-	os.MkdirAll("./config/opendkim", 0755)
-	os.MkdirAll("./config/opendkim/keys/default", 0755)
+	os.MkdirAll("/opt/esemail/config/opendkim", 0755)
+	os.MkdirAll("/opt/esemail/config/opendkim/keys/default", 0755)
 
 	// 生成DKIM密钥
 	securityService := NewSecurityService()
 	if err := securityService.GenerateDKIMKeySecure(domain); err != nil {
 		// 如果安全生成失败，尝试手动生成基本密钥配置
-		keyTablePath := "./config/opendkim/KeyTable" 
-		signingTablePath := "./config/opendkim/SigningTable"
+		keyTablePath := "/opt/esemail/config/opendkim/KeyTable"
+		signingTablePath := "/opt/esemail/config/opendkim/SigningTable"
 
-		keyTable := fmt.Sprintf("default._domainkey.%s %s:default:./config/opendkim/keys/default/default.private\n", domain, domain)
+		keyTable := fmt.Sprintf("default._domainkey.%s %s:default:/opt/esemail/config/opendkim/keys/default/default.private\n", domain, domain)
 		if err := os.WriteFile(keyTablePath, []byte(keyTable), 0644); err != nil {
 			return fmt.Errorf("创建KeyTable失败: %v", err)
 		}
@@ -200,12 +200,12 @@ func (s *SetupService) updateDKIMConfig(domain string) error {
 		}
 
 		// 创建基础私钥文件占位符
-		privatePath := "./config/opendkim/keys/default/default.private"
+		privatePath := "/opt/esemail/config/opendkim/keys/default/default.private"
 		privateContent := "-----BEGIN PRIVATE KEY-----\n# PLACEHOLDER - DKIM key generation requires proper setup\n-----END PRIVATE KEY-----\n"
 		os.WriteFile(privatePath, []byte(privateContent), 0600)
 
 		// 创建公钥文件占位符
-		publicPath := "./config/opendkim/keys/default/default.txt"
+		publicPath := "/opt/esemail/config/opendkim/keys/default/default.txt"
 		publicContent := fmt.Sprintf("default._domainkey.%s IN TXT \"v=DKIM1; k=rsa; p=PLACEHOLDER_PUBLIC_KEY\"\n", domain)
 		os.WriteFile(publicPath, []byte(publicContent), 0644)
 
@@ -237,12 +237,12 @@ func (s *SetupService) createAdminUser(config SetupConfig) error {
 }
 
 func (s *SetupService) markSystemSetup() error {
-	os.MkdirAll("./config", 0755)
-	return os.WriteFile("./config/.setup_complete", []byte("1"), 0644)
+	os.MkdirAll("/opt/esemail/config", 0755)
+	return os.WriteFile("/opt/esemail/config/.setup_complete", []byte("1"), 0644)
 }
 
 func (s *SetupService) GetDKIMPublicKey(domain string) (string, error) {
-	keyPath := "./config/opendkim/keys/default/default.txt"
+	keyPath := "/opt/esemail/config/opendkim/keys/default/default.txt"
 
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("DKIM公钥文件不存在，请先完成系统初始化")

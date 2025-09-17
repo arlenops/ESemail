@@ -50,7 +50,7 @@ type UpdateUserRequest struct {
 func NewUserService() *UserService {
 	return &UserService{
 		securityService: NewSecurityService(),
-		dataDir:        "./data",
+		dataDir:        "/opt/esemail/data",
 	}
 }
 
@@ -208,7 +208,7 @@ func (s *UserService) createSystemUser(user *User, plainPassword string) error {
 		return fmt.Errorf("无效的邮箱地址格式: %s", user.Email)
 	}
 	
-	mailDir := fmt.Sprintf("./mail/%s/%s", user.Domain, localPart)
+	mailDir := fmt.Sprintf("/opt/esemail/mail/%s/%s", user.Domain, localPart)
 
 	// 创建邮箱目录
 	if err := os.MkdirAll(mailDir+"/Maildir", 0700); err != nil {

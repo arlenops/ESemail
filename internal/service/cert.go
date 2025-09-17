@@ -140,7 +140,7 @@ func NewCertService(config *config.CertConfig) (*CertService, error) {
 	service := &CertService{
 		config:            config,
 		pendingChallenges: make(map[string]*LegoDNSChallenge),
-		pendingFilePath:   filepath.Join("./data", "certificates", "pending_challenges.json"),
+		pendingFilePath:   filepath.Join("/opt/esemail/data", "certificates", "pending_challenges.json"),
 		security:          NewSecurityService(),
 	}
 

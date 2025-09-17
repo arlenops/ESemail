@@ -89,7 +89,7 @@ func (s *DNSService) CheckDomainDNS(domain, serverIP, mailServer string) *Domain
 // getDKIMPublicKey 获取或生成DKIM公钥
 func (s *DNSService) getDKIMPublicKey(domain string) (string, error) {
 	// DKIM密钥存储路径
-	keyDir := "./data/dkim"
+	keyDir := "/opt/esemail/data/dkim"
 	privateKeyPath := filepath.Join(keyDir, fmt.Sprintf("%s.private", domain))
 	publicKeyPath := filepath.Join(keyDir, fmt.Sprintf("%s.public", domain))
 	

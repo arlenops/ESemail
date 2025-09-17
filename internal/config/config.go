@@ -1,15 +1,9 @@
 package config
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
 	"time"
-
-	"gopkg.in/yaml.v2"
 )
 
 type Config struct {
@@ -23,8 +17,8 @@ type Config struct {
 }
 
 type StorageConfig struct {
-	DataDir     string `yaml:"data_dir" json:"data_dir" env:"STORAGE_DATA_DIR" default:"./data"`
-	BackupDir   string `yaml:"backup_dir" json:"backup_dir" env:"STORAGE_BACKUP_DIR" default:"./backups"`
+	DataDir     string `yaml:"data_dir" json:"data_dir" env:"STORAGE_DATA_DIR" default:"/opt/esemail/data"`
+	BackupDir   string `yaml:"backup_dir" json:"backup_dir" env:"STORAGE_BACKUP_DIR" default:"/opt/esemail/backups"`
 	MaxFileSize int64  `yaml:"max_file_size" json:"max_file_size" default:"104857600"`
 	CleanupDays int    `yaml:"cleanup_days" json:"cleanup_days" default:"30"`
 }
@@ -41,7 +35,7 @@ type ServerConfig struct {
 
 type DatabaseConfig struct {
 	Type         string `yaml:"type" json:"type" env:"DB_TYPE" default:"json"`
-	Path         string `yaml:"path" json:"path" env:"DB_PATH" default:"./db"`
+	Path         string `yaml:"path" json:"path" env:"DB_PATH" default:"/opt/esemail/data/db"`
 	Host         string `yaml:"host" json:"host" env:"DB_HOST" default:"localhost"`
 	Port         int    `yaml:"port" json:"port" env:"DB_PORT" default:"5432"`
 	Username     string `yaml:"username" json:"username" env:"DB_USERNAME"`
@@ -54,8 +48,8 @@ type DatabaseConfig struct {
 
 type MailConfig struct {
 	Domain          string        `yaml:"domain" json:"domain" env:"MAIL_DOMAIN" default:"localhost"`
-	DataPath        string        `yaml:"data_path" json:"data_path" default:"./mail"`
-	LogPath         string        `yaml:"log_path" json:"log_path" default:"./logs"`
+	DataPath        string        `yaml:"data_path" json:"data_path" default:"/opt/esemail/mail"`
+	LogPath         string        `yaml:"log_path" json:"log_path" default:"/opt/esemail/logs"`
 	Domains         []string      `yaml:"domains" json:"domains"`
 	AdminEmail      string        `yaml:"admin_email" json:"admin_email"`
 	SMTPPort        string        `yaml:"smtp_port" json:"smtp_port" env:"SMTP_PORT" default:"25"`
@@ -106,6 +100,9 @@ type LoggingConfig struct {
 }
 
 func Load() (*Config, error) {
+	// 初始化必要目录
+	initializeDirectories()
+
 	cfg := &Config{
 		Server: ServerConfig{
 			Port:            "8686",
@@ -118,7 +115,7 @@ func Load() (*Config, error) {
 		},
 		Database: DatabaseConfig{
 			Type:         "json",
-			Path:         "./db",
+			Path:         "/opt/esemail/data/db",
 			Host:         "localhost",
 			Port:         5432,
 			Database:     "esemail",
@@ -127,40 +124,45 @@ func Load() (*Config, error) {
 			MaxIdleConns: 5,
 		},
 		Mail: MailConfig{
-			Domain:         "localhost",
-			DataPath:       "./mail",
-			LogPath:        "./logs",
-			Domains:        []string{},
-			SMTPPort:       "25",
+			Domain:             "caiji.wiki",
+			DataPath:           "/opt/esemail/mail",
+			LogPath:            "/opt/esemail/logs",
+			Domains:            []string{"caiji.wiki"},
+			AdminEmail:         "admin@caiji.wiki",
+			SMTPPort:           "25",
 			SMTPSubmissionPort: "587",
-			SMTPSPort:      "465",
-			IMAPPort:       "143",
-			IMAPSPort:      "993",
-			EnableTLS:      true,
-			MaxMessageSize: 25 * 1024 * 1024, // 25MB
-			MaxRecipients:  100,
-			QueueRetries:   3,
-			QueueInterval:  30 * time.Second,
-			RetryInterval:  5 * time.Minute,
-			MaxConcurrent:  10,
+			SMTPSPort:          "465",
+			IMAPPort:           "143",
+			IMAPSPort:          "993",
+			EnableTLS:          true,
+			TLSCertFile:        "/etc/ssl/mail/mail.caiji.wiki/fullchain.pem",
+			TLSKeyFile:         "/etc/ssl/mail/mail.caiji.wiki/private.key",
+			MaxMessageSize:     25 * 1024 * 1024, // 25MB
+			MaxRecipients:      100,
+			QueueRetries:       3,
+			QueueInterval:      30 * time.Second,
+			RetryInterval:      5 * time.Minute,
+			MaxConcurrent:      10,
 		},
 		Cert: CertConfig{
-			CertPath:  "./certs",
-			Server:    "letsencrypt",
-			Email:     "admin@example.com",
+			CertPath: "/etc/ssl/mail",
+			Server:   "letsencrypt",
+			Email:    "admin@caiji.wiki",
 		},
 		Storage: StorageConfig{
-			DataDir:     "./data",
-			BackupDir:   "./backups",
+			DataDir:     "/opt/esemail/data",
+			BackupDir:   "/opt/esemail/backups",
 			MaxFileSize: 100 * 1024 * 1024, // 100MB
 			CleanupDays: 30,
 		},
 		Security: SecurityConfig{
+			JWTSecret:        "caiji-wiki-mail-server-jwt-secret-2024-fixed",
 			JWTExpiration:    24 * time.Hour,
+			CSRFSecret:       "caiji-wiki-mail-server-csrf-secret-2024-fixed",
 			RateLimitEnabled: true,
 			RateLimitRPS:     100,
 			RateLimitBurst:   200,
-			AllowedOrigins:   []string{},
+			AllowedOrigins:   []string{"https://mail.caiji.wiki", "http://localhost:8686"},
 			TrustedProxies:   []string{},
 		},
 		Logging: LoggingConfig{
@@ -175,108 +177,38 @@ func Load() (*Config, error) {
 		},
 	}
 
-	// Load from config file
-	if configFile := os.Getenv("ESEMAIL_CONFIG"); configFile != "" {
-		if err := loadConfigFromFile(cfg, configFile); err != nil {
-			return nil, fmt.Errorf("加载配置文件失败: %w", err)
-		}
-	}
-
-	// Load from environment variables
-	loadFromEnv(cfg)
-
 	return cfg, nil
 }
 
-// loadConfigFromFile 从配置文件加载
-func loadConfigFromFile(cfg *Config, configPath string) error {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		return err
+// initializeDirectories 初始化所有必要的目录和权限
+func initializeDirectories() {
+	dirs := []string{
+		"/opt/esemail",
+		"/opt/esemail/data",
+		"/opt/esemail/data/db",
+		"/opt/esemail/mail",
+		"/opt/esemail/logs",
+		"/opt/esemail/backups",
+		"/var/mail",
+		"/var/mail/vhosts",
+		"/var/mail/vhosts/caiji.wiki",
 	}
 
-	ext := strings.ToLower(filepath.Ext(configPath))
-	switch ext {
-	case ".yaml", ".yml":
-		return yaml.Unmarshal(data, cfg)
-	case ".json":
-		return json.Unmarshal(data, cfg)
-	default:
-		// 默认尝试YAML
-		return yaml.Unmarshal(data, cfg)
-	}
-}
-
-// loadFromEnv 从环境变量加载配置
-func loadFromEnv(cfg *Config) {
-	// Server
-	if port := os.Getenv("ESEMAIL_PORT"); port != "" {
-		cfg.Server.Port = port
-	}
-	if port := os.Getenv("SERVER_PORT"); port != "" {
-		cfg.Server.Port = port
-	}
-	if host := os.Getenv("SERVER_HOST"); host != "" {
-		cfg.Server.Host = host
-	}
-
-	// Mail
-	if domain := os.Getenv("MAIL_DOMAIN"); domain != "" {
-		cfg.Mail.Domain = domain
-	}
-	if smtpPort := os.Getenv("SMTP_PORT"); smtpPort != "" {
-		cfg.Mail.SMTPPort = smtpPort
-	}
-	if imapPort := os.Getenv("IMAP_PORT"); imapPort != "" {
-		cfg.Mail.IMAPPort = imapPort
-	}
-	if enableTLS := os.Getenv("MAIL_ENABLE_TLS"); enableTLS != "" {
-		if tls, err := strconv.ParseBool(enableTLS); err == nil {
-			cfg.Mail.EnableTLS = tls
+	for _, dir := range dirs {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			// 忽略权限错误，继续创建其他目录
+			continue
 		}
 	}
 
-	// Database
-	if dbType := os.Getenv("DB_TYPE"); dbType != "" {
-		cfg.Database.Type = dbType
-	}
-	if dbHost := os.Getenv("DB_HOST"); dbHost != "" {
-		cfg.Database.Host = dbHost
-	}
-	if dbPort := os.Getenv("DB_PORT"); dbPort != "" {
-		if port, err := strconv.Atoi(dbPort); err == nil {
-			cfg.Database.Port = port
-		}
-	}
-	if dbUser := os.Getenv("DB_USERNAME"); dbUser != "" {
-		cfg.Database.Username = dbUser
-	}
-	if dbPass := os.Getenv("DB_PASSWORD"); dbPass != "" {
-		cfg.Database.Password = dbPass
-	}
-	if dbName := os.Getenv("DB_NAME"); dbName != "" {
-		cfg.Database.Database = dbName
-	}
-
-	// Security
-	if jwtSecret := os.Getenv("JWT_SECRET"); jwtSecret != "" {
-		cfg.Security.JWTSecret = jwtSecret
-	}
-	if csrfSecret := os.Getenv("CSRF_SECRET"); csrfSecret != "" {
-		cfg.Security.CSRFSecret = csrfSecret
-	}
-
-	// Logging
-	if logLevel := os.Getenv("LOG_LEVEL"); logLevel != "" {
-		cfg.Logging.Level = logLevel
-	}
-	if logFormat := os.Getenv("LOG_FORMAT"); logFormat != "" {
-		cfg.Logging.Format = logFormat
-	}
-	if logFile := os.Getenv("LOG_FILE"); logFile != "" {
-		cfg.Logging.File = logFile
-	}
+	// 尝试设置邮件目录权限（如果有权限）
+	os.Chown("/var/mail", 5000, 5000)  // vmail用户
+	os.Chown("/var/mail/vhosts", 5000, 5000)
+	os.Chown("/var/mail/vhosts/caiji.wiki", 5000, 5000)
+	os.Chmod("/var/mail/vhosts", 0770)
+	os.Chmod("/var/mail/vhosts/caiji.wiki", 0770)
 }
+
 
 // GetDSN 获取数据库连接字符串
 func (c *Config) GetDSN() string {
@@ -295,12 +227,10 @@ func (c *Config) GetDSN() string {
 
 // IsProduction 检查是否为生产环境
 func (c *Config) IsProduction() bool {
-	env := os.Getenv("APP_ENV")
-	return env == "production" || env == "prod"
+	return true // 固定为生产环境
 }
 
 // IsDevelopment 检查是否为开发环境
 func (c *Config) IsDevelopment() bool {
-	env := os.Getenv("APP_ENV")
-	return env == "development" || env == "dev" || env == ""
+	return false // 固定为生产环境
 }

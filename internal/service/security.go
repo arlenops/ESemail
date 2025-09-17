@@ -194,7 +194,7 @@ func (s *SecurityService) ValidateFilePath(path string) error {
 	// 检查相对路径的合法性 
 	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "/") {
 		allowedPrefixes := []string{
-			"./data/", "./config/", "./mail/", "./logs/", "./certs/", "./acme/",
+			"/opt/esemail/data/", "/opt/esemail/config/", "/opt/esemail/mail/", "/opt/esemail/logs/", "/opt/esemail/certs/", "/opt/esemail/acme/",
 			"/var/lib/esemail/", "/etc/esemail/", "/etc/postfix/", "/etc/dovecot/", 
 			"/etc/opendkim/", "/etc/ssl/mail/", "/etc/rspamd/", "/var/spool/postfix/",
 		}
@@ -277,7 +277,7 @@ func (s *SecurityService) GenerateDKIMKeySecure(domain string) error {
 	args := []string{
 		"-s", "default",
 		"-d", domain,
-		"-D", "./config/opendkim/keys/default",
+		"-D", "/opt/esemail/config/opendkim/keys/default",
 	}
 	
 	output, err := s.ExecuteSecureCommand("opendkim-genkey", args, 60*time.Second)

@@ -15,24 +15,15 @@ func main() {
         log.Fatalf("配置加载失败: %v", err)
     }
 
-    // 初始化存储 - 使用相对路径避免权限问题
-    dataDir := "./data"
-    if cfg.Storage.DataDir != "" {
-        dataDir = cfg.Storage.DataDir
-    }
+    // 初始化存储 - 使用固定绝对路径
+    dataDir := "/opt/esemail/data"
     jsonStorage := storage.NewJSONStorage(dataDir)
     if err := jsonStorage.Initialize(); err != nil {
         log.Fatalf("存储初始化失败: %v", err)
     }
 
-    // 加载API管理的应用配置，并覆盖关键项（轻量化：不依赖config.yaml）
+    // 初始化设置服务（不再覆盖配置，配置已固定）
     settingsService := service.NewAppSettingsService(dataDir)
-    if settings, err := settingsService.Load(); err == nil && settings != nil {
-        if settings.Mail.Domain != "" { cfg.Mail.Domain = settings.Mail.Domain }
-        if settings.Cert.Email != "" { cfg.Cert.Email = settings.Cert.Email }
-        if settings.Cert.Server != "" { cfg.Cert.Server = settings.Cert.Server }
-        if settings.Cert.CertPath != "" { cfg.Cert.CertPath = settings.Cert.CertPath }
-    }
 
     // 初始化服务
     validationService := service.NewValidationService()

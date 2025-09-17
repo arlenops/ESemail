@@ -128,13 +128,13 @@ func (s *SystemService) isSystemInitialized() bool {
 	}
 
 	// 检查初始化是否完成
-	_, err := os.Stat("./config/.initialized")
+	_, err := os.Stat("/opt/esemail/config/.initialized")
 	return err == nil
 }
 
 func (s *SystemService) markSystemInitialized() error {
-	os.MkdirAll("./config", 0755)
-	return os.WriteFile("./config/.initialized", []byte("1"), 0644)
+	os.MkdirAll("/opt/esemail/config", 0755)
+	return os.WriteFile("/opt/esemail/config/.initialized", []byte("1"), 0644)
 }
 
 func (s *SystemService) getServicesStatus() map[string]string {
@@ -257,11 +257,11 @@ func (s *SystemService) installPackagesStep() error {
 func (s *SystemService) createDirectoriesStep() error {
 	// 使用相对路径创建目录，避免系统权限问题
 	dirs := []string{
-		"./config",
-		"./mail",
-		"./logs", 
-		"./certs",
-		"./data/db",
+		"/opt/esemail/config",
+		"/opt/esemail/mail",
+		"/opt/esemail/logs",
+		"/opt/esemail/certs",
+		"/opt/esemail/data/db",
 	}
 
 	for _, dir := range dirs {
@@ -282,11 +282,11 @@ func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
 		"/etc/rspamd/local.d/options.inc": s.generateRspamdConfig(),
 		"/etc/opendkim.conf":            s.generateOpenDKIMConfig(setupData),
 		// 本地备份配置
-		"./config/postfix_main.cf":     s.generatePostfixMainConfig(setupData),
-		"./config/postfix_master.cf":   s.generatePostfixMasterConfig(),
-		"./config/dovecot_config.conf": s.generateDovecotConfig(setupData),
-		"./config/rspamd_config.conf":  s.generateRspamdConfig(),
-		"./config/opendkim.conf":       s.generateOpenDKIMConfig(setupData),
+		"/opt/esemail/config/postfix_main.cf":     s.generatePostfixMainConfig(setupData),
+		"/opt/esemail/config/postfix_master.cf":   s.generatePostfixMasterConfig(),
+		"/opt/esemail/config/dovecot_config.conf": s.generateDovecotConfig(setupData),
+		"/opt/esemail/config/rspamd_config.conf":  s.generateRspamdConfig(),
+		"/opt/esemail/config/opendkim.conf":       s.generateOpenDKIMConfig(setupData),
 	}
 
 	for path, content := range configs {
@@ -411,7 +411,7 @@ func (s *SystemService) generateDKIMStep(setupData *SetupConfig) error {
 	// 创建 DKIM 目录
 	dkimDirs := []string{
 		"/etc/opendkim/keys/default",
-		"./config/opendkim/keys/default",
+		"/opt/esemail/config/opendkim/keys/default",
 	}
 	
 	for _, dkimDir := range dkimDirs {
@@ -423,24 +423,24 @@ func (s *SystemService) generateDKIMStep(setupData *SetupConfig) error {
 	// 生成真实的 DKIM 密钥对
 	log.Printf("生成 DKIM 密钥对...")
 	if _, err := s.securityService.ExecuteSecureCommand("opendkim-genkey", 
-		[]string{"-s", "default", "-d", setupData.Domain, "-D", "./config/opendkim/keys/default/"}, 
+		[]string{"-s", "default", "-d", setupData.Domain, "-D", "/opt/esemail/config/opendkim/keys/default/"},
 		30*time.Second); err != nil {
 		log.Printf("警告: DKIM 密钥生成失败: %v", err)
 		// 创建占位符文件
 		privateKey := "# DKIM private key placeholder\n# Generate with: opendkim-genkey -s default -d " + setupData.Domain + "\n"
-		os.WriteFile("./config/opendkim/keys/default/default.private", []byte(privateKey), 0600)
+		os.WriteFile("/opt/esemail/config/opendkim/keys/default/default.private", []byte(privateKey), 0600)
 		publicKey := fmt.Sprintf("default._domainkey.%s IN TXT \"v=DKIM1; k=rsa; p=PLACEHOLDER_PUBLIC_KEY\"\n", setupData.Domain)
-		os.WriteFile("./config/opendkim/keys/default/default.txt", []byte(publicKey), 0644)
+		os.WriteFile("/opt/esemail/config/opendkim/keys/default/default.txt", []byte(publicKey), 0644)
 	}
 
 	// 生成 DKIM 配置文件
 	keyTable := fmt.Sprintf("default._domainkey.%s %s:default:/etc/opendkim/keys/default/default.private\n", setupData.Domain, setupData.Domain)
-	for _, path := range []string{"/etc/opendkim/KeyTable", "./config/opendkim/KeyTable"} {
+	for _, path := range []string{"/etc/opendkim/KeyTable", "/opt/esemail/config/opendkim/KeyTable"} {
 		os.WriteFile(path, []byte(keyTable), 0644)
 	}
 
 	signingTable := fmt.Sprintf("*@%s default._domainkey.%s\n", setupData.Domain, setupData.Domain)
-	for _, path := range []string{"/etc/opendkim/SigningTable", "./config/opendkim/SigningTable"} {
+	for _, path := range []string{"/etc/opendkim/SigningTable", "/opt/esemail/config/opendkim/SigningTable"} {
 		os.WriteFile(path, []byte(signingTable), 0644)
 	}
 
@@ -772,7 +772,7 @@ func (s *SystemService) installAcmeSh() error {
 // checkSystemInitialization 检查系统是否已初始化
 func (s *SystemService) checkSystemInitialization() bool {
 	// 检查初始化标记文件
-	if _, err := os.Stat("./config/.initialized"); err != nil {
+	if _, err := os.Stat("/opt/esemail/config/.initialized"); err != nil {
 		return false
 	}
 	

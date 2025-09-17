@@ -77,7 +77,7 @@ func NewDomainService() *DomainService {
 	return &DomainService{
 		securityService: NewSecurityService(),
 		dnsService:     NewDNSService(),
-		dataDir:        "./data", // 默认数据目录
+		dataDir:        "/opt/esemail/data", // 默认数据目录
 	}
 }
 
