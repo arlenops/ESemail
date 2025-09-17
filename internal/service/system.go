@@ -467,9 +467,9 @@ append_dot_mydomain = no
 readme_directory = no
 compatibility_level = 2
 
-# TLS 配置
-smtpd_tls_cert_file = /etc/ssl/mail/%s/fullchain.pem
-smtpd_tls_key_file = /etc/ssl/mail/%s/private.key
+# TLS 配置 (使用系统默认证书确保服务可用)
+smtpd_tls_cert_file = /etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file = /etc/ssl/private/ssl-cert-snakeoil.key
 smtpd_use_tls = yes
 smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
