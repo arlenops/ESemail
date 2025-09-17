@@ -309,11 +309,6 @@ func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
 		return fmt.Errorf("创建Dovecot必需文件失败: %v", err)
 	}
 
-	// 创建默认邮件用户
-	if err := s.createDefaultMailUser(setupData); err != nil {
-		log.Printf("警告: 创建默认邮件用户失败: %v", err)
-	}
-
 	// 设置SSL证书权限
 	if err := s.setupSSLCertificatePermissions(setupData); err != nil {
 		log.Printf("警告: 设置SSL证书权限失败: %v", err)
@@ -354,60 +349,6 @@ func (s *SystemService) createDovecotRequiredFiles() error {
 			log.Printf("已创建Dovecot用户文件: %s", usersFile)
 		}
 	}
-
-	return nil
-}
-
-// 创建默认邮件用户
-func (s *SystemService) createDefaultMailUser(setupData *SetupConfig) error {
-	usersFile := "/etc/dovecot/users"
-
-	// 创建默认邮件用户 (使用域名的第一部分作为用户名)
-	defaultUser := fmt.Sprintf("admin@%s", setupData.Domain)
-	defaultPassword := "123456789" // 默认密码，生产环境应该使用更安全的方式
-
-	// 检查用户是否已存在
-	content, err := os.ReadFile(usersFile)
-	if err != nil {
-		return fmt.Errorf("读取用户文件失败: %v", err)
-	}
-
-	// 如果用户不存在，添加用户
-	if !strings.Contains(string(content), defaultUser) {
-		userEntry := fmt.Sprintf("%s:%s\n", defaultUser, defaultPassword)
-
-		file, err := os.OpenFile(usersFile, os.O_APPEND|os.O_WRONLY, 0600)
-		if err != nil {
-			return fmt.Errorf("打开用户文件失败: %v", err)
-		}
-		defer file.Close()
-
-		if _, err := file.WriteString(userEntry); err != nil {
-			return fmt.Errorf("写入用户文件失败: %v", err)
-		}
-
-		log.Printf("已添加默认邮件用户: %s", defaultUser)
-
-		// 同时创建测试用户 yiqiu@caiji.wiki（如果域名是caiji.wiki）
-		if setupData.Domain == "caiji.wiki" {
-			testUser := "yiqiu@caiji.wiki:123456789\n"
-			if !strings.Contains(string(content), "yiqiu@caiji.wiki") {
-				if _, err := file.WriteString(testUser); err != nil {
-					log.Printf("警告: 无法添加测试用户: %v", err)
-				} else {
-					log.Printf("已添加测试用户: yiqiu@caiji.wiki")
-				}
-			}
-		}
-	}
-
-	// 设置用户文件权限
-	if err := os.Chmod(usersFile, 0640); err != nil {
-		log.Printf("警告: 无法设置用户文件权限: %v", err)
-	}
-
-	// 设置用户文件所有者
-	s.securityService.ExecuteSecureCommand("chown", []string{"root:dovecot", usersFile}, 10*time.Second)
 
 	return nil
 }

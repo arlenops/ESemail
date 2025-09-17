@@ -104,7 +104,7 @@ func (s *UserService) CreateUser(req CreateUserRequest) (*User, error) {
 
 	user.Password = string(hashedPassword)
 	
-	if err := s.createSystemUser(user, string(hashedPassword)); err != nil {
+	if err := s.createSystemUser(user, req.Password); err != nil {
 		return nil, fmt.Errorf("创建系统用户失败: %v", err)
 	}
 
@@ -193,7 +193,7 @@ func (s *UserService) generateRandomPassword(length int) string {
 	return string(bytes)
 }
 
-func (s *UserService) createSystemUser(user *User, hashedPassword string) error {
+func (s *UserService) createSystemUser(user *User, plainPassword string) error {
 	// 验证输入安全性
 	if err := s.securityService.ValidateEmail(user.Email); err != nil {
 		return fmt.Errorf("邮箱验证失败: %v", err)
@@ -222,19 +222,26 @@ func (s *UserService) createSystemUser(user *User, hashedPassword string) error 
 		}
 	}
 
-	// 创建用户文件目录
-	os.MkdirAll("./config/dovecot", 0755)
+	// 将用户添加到系统级Dovecot用户文件
+	dovecotUsersFile := "/etc/dovecot/users"
 
-	userLine := fmt.Sprintf("%s:{CRYPT}%s\n", user.Email, hashedPassword)
-	f, err := os.OpenFile("./config/dovecot/users", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	// 确保目录存在
+	os.MkdirAll(filepath.Dir(dovecotUsersFile), 0755)
+
+	// 创建用户条目 (使用明文密码，因为Dovecot配置为PLAIN)
+	userLine := fmt.Sprintf("%s:%s\n", user.Email, plainPassword)
+
+	f, err := os.OpenFile(dovecotUsersFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0640)
 	if err != nil {
-		return fmt.Errorf("打开用户文件失败: %v", err)
+		return fmt.Errorf("打开Dovecot用户文件失败: %v", err)
 	}
 	defer f.Close()
 
 	if _, err := f.WriteString(userLine); err != nil {
-		return fmt.Errorf("写入用户文件失败: %v", err)
+		return fmt.Errorf("写入Dovecot用户文件失败: %v", err)
 	}
+
+	log.Printf("已将用户 %s 添加到Dovecot用户文件", user.Email)
 
 	return nil
 }
