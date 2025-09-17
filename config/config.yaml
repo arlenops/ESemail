@@ -1,0 +1,65 @@
+server:
+  port: "8686"
+  host: "0.0.0.0"
+  mode: "release"
+  read_timeout: 30s
+  write_timeout: 30s
+  shutdown_timeout: 10s
+  max_header_bytes: 1048576
+
+database:
+  type: "json"
+  path: "./data/db"
+
+mail:
+  domain: "caiji.wiki"
+  data_path: "./mail"
+  log_path: "./logs"
+  domains: []
+  admin_email: "admin@caiji.wiki"
+  smtp_port: "25"
+  smtp_submission_port: "587"
+  smtps_port: "465"
+  imap_port: "143"
+  imaps_port: "993"
+  enable_tls: true
+  tls_cert_file: "/etc/ssl/mail/mail.caiji.wiki/fullchain.pem"
+  tls_key_file: "/etc/ssl/mail/mail.caiji.wiki/private.key"
+  max_message_size: 26214400
+  max_recipients: 100
+  queue_retries: 3
+  queue_interval: 30s
+  retry_interval: 5m
+  max_concurrent: 10
+
+cert:
+  cert_path: "/etc/ssl/mail"
+  server: "letsencrypt"
+  email: "admin@caiji.wiki"
+
+storage:
+  data_dir: "./data"
+  backup_dir: "./backups"
+  max_file_size: 104857600
+  cleanup_days: 30
+
+security:
+  jwt_secret: "caiji-wiki-mail-server-jwt-secret-2024"
+  jwt_expiration: 24h
+  csrf_secret: "caiji-wiki-mail-server-csrf-secret-2024"
+  rate_limit_enabled: true
+  rate_limit_rps: 100
+  rate_limit_burst: 200
+  allowed_origins: ["https://mail.caiji.wiki", "http://localhost:8686"]
+  trusted_proxies: []
+
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  file: ""
+  max_size: 100
+  max_backups: 3
+  max_age: 7
+  compress: true
+  enable_caller: true
