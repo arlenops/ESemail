@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -304,7 +305,19 @@ func (s *SystemService) generateConfigsStep(setupData *SetupConfig) error {
 	}
 
 	// 创建Dovecot必需的用户文件和目录
-	s.createDovecotRequiredFiles()
+	if err := s.createDovecotRequiredFiles(); err != nil {
+		return fmt.Errorf("创建Dovecot必需文件失败: %v", err)
+	}
+
+	// 创建默认邮件用户
+	if err := s.createDefaultMailUser(setupData); err != nil {
+		log.Printf("警告: 创建默认邮件用户失败: %v", err)
+	}
+
+	// 设置SSL证书权限
+	if err := s.setupSSLCertificatePermissions(setupData); err != nil {
+		log.Printf("警告: 设置SSL证书权限失败: %v", err)
+	}
 
 	return nil
 }
@@ -339,6 +352,110 @@ func (s *SystemService) createDovecotRequiredFiles() error {
 			log.Printf("警告: 无法创建用户文件 %s: %v", usersFile, err)
 		} else {
 			log.Printf("已创建Dovecot用户文件: %s", usersFile)
+		}
+	}
+
+	return nil
+}
+
+// 创建默认邮件用户
+func (s *SystemService) createDefaultMailUser(setupData *SetupConfig) error {
+	usersFile := "/etc/dovecot/users"
+
+	// 创建默认邮件用户 (使用域名的第一部分作为用户名)
+	defaultUser := fmt.Sprintf("admin@%s", setupData.Domain)
+	defaultPassword := "123456789" // 默认密码，生产环境应该使用更安全的方式
+
+	// 检查用户是否已存在
+	content, err := os.ReadFile(usersFile)
+	if err != nil {
+		return fmt.Errorf("读取用户文件失败: %v", err)
+	}
+
+	// 如果用户不存在，添加用户
+	if !strings.Contains(string(content), defaultUser) {
+		userEntry := fmt.Sprintf("%s:%s\n", defaultUser, defaultPassword)
+
+		file, err := os.OpenFile(usersFile, os.O_APPEND|os.O_WRONLY, 0600)
+		if err != nil {
+			return fmt.Errorf("打开用户文件失败: %v", err)
+		}
+		defer file.Close()
+
+		if _, err := file.WriteString(userEntry); err != nil {
+			return fmt.Errorf("写入用户文件失败: %v", err)
+		}
+
+		log.Printf("已添加默认邮件用户: %s", defaultUser)
+
+		// 同时创建测试用户 yiqiu@caiji.wiki（如果域名是caiji.wiki）
+		if setupData.Domain == "caiji.wiki" {
+			testUser := "yiqiu@caiji.wiki:123456789\n"
+			if !strings.Contains(string(content), "yiqiu@caiji.wiki") {
+				if _, err := file.WriteString(testUser); err != nil {
+					log.Printf("警告: 无法添加测试用户: %v", err)
+				} else {
+					log.Printf("已添加测试用户: yiqiu@caiji.wiki")
+				}
+			}
+		}
+	}
+
+	// 设置用户文件权限
+	if err := os.Chmod(usersFile, 0640); err != nil {
+		log.Printf("警告: 无法设置用户文件权限: %v", err)
+	}
+
+	// 设置用户文件所有者
+	s.securityService.ExecuteSecureCommand("chown", []string{"root:dovecot", usersFile}, 10*time.Second)
+
+	return nil
+}
+
+// 设置SSL证书权限
+func (s *SystemService) setupSSLCertificatePermissions(setupData *SetupConfig) error {
+	// 确定主机名
+	mailHost := setupData.Hostname
+	if mailHost == "" {
+		mailHost = fmt.Sprintf("mail.%s", setupData.Domain)
+	}
+
+	certDir := fmt.Sprintf("/etc/ssl/mail/%s", mailHost)
+	certFile := filepath.Join(certDir, "fullchain.pem")
+	keyFile := filepath.Join(certDir, "private.key")
+
+	log.Printf("设置SSL证书权限 - 证书目录: %s", certDir)
+
+	// 检查证书文件是否存在
+	if _, err := os.Stat(certFile); os.IsNotExist(err) {
+		log.Printf("警告: 证书文件不存在: %s", certFile)
+		return nil // 不是错误，可能还没有证书
+	}
+
+	if _, err := os.Stat(keyFile); os.IsNotExist(err) {
+		log.Printf("警告: 密钥文件不存在: %s", keyFile)
+		return nil // 不是错误，可能还没有证书
+	}
+
+	// 设置证书目录权限和所有者
+	commands := []struct {
+		cmd  string
+		args []string
+		desc string
+	}{
+		{"chown", []string{"-R", "root:ssl-cert", certDir}, "设置证书目录所有者"},
+		{"chmod", []string{"755", certDir}, "设置证书目录权限"},
+		{"chmod", []string{"644", certFile}, "设置证书文件权限"},
+		{"chmod", []string{"640", keyFile}, "设置私钥文件权限"},
+		{"usermod", []string{"-a", "-G", "ssl-cert", "postfix"}, "添加postfix用户到ssl-cert组"},
+	}
+
+	for _, cmd := range commands {
+		log.Printf("执行: %s %v", cmd.cmd, cmd.args)
+		if err := s.securityService.ExecuteSecureCommand(cmd.cmd, cmd.args, 10*time.Second); err != nil {
+			log.Printf("警告: %s失败: %v", cmd.desc, err)
+		} else {
+			log.Printf("成功: %s", cmd.desc)
 		}
 	}
 
@@ -445,10 +562,19 @@ func (s *SystemService) verifyServicesStep() error {
 }
 
 func (s *SystemService) generatePostfixMainConfig(setupData *SetupConfig) string {
+    // 确保主机名设置正确
     mailHost := setupData.Hostname
     if mailHost == "" {
         mailHost = fmt.Sprintf("mail.%s", setupData.Domain)
     }
+
+    // 输出调试信息
+    log.Printf("生成Postfix配置 - 域名: %s, 主机名: %s", setupData.Domain, mailHost)
+
+    // 确保证书路径使用正确的主机名
+    certPath := fmt.Sprintf("/etc/ssl/mail/%s/fullchain.pem", mailHost)
+    keyPath := fmt.Sprintf("/etc/ssl/mail/%s/private.key", mailHost)
+
     return fmt.Sprintf(`myhostname = %s
 mydomain = %s
 myorigin = $mydomain
@@ -468,8 +594,8 @@ readme_directory = no
 compatibility_level = 2
 
 # TLS 配置
-smtpd_tls_cert_file = /etc/ssl/mail/%s/fullchain.pem
-smtpd_tls_key_file = /etc/ssl/mail/%s/private.key
+smtpd_tls_cert_file = %s
+smtpd_tls_key_file = %s
 smtpd_use_tls = yes
 smtpd_tls_session_cache_database = btree:${data_directory}/smtpd_scache
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
@@ -492,12 +618,12 @@ milter_default_action = accept
 
 virtual_alias_domains =
 virtual_alias_maps = hash:/etc/postfix/virtual
-virtual_mailbox_domains = 
+virtual_mailbox_domains =
 virtual_mailbox_maps = hash:/etc/postfix/vmailbox
 virtual_mailbox_base = /var/mail/vhosts
 virtual_uid_maps = static:5000
 virtual_gid_maps = static:5000
-`, mailHost, setupData.Domain, mailHost, mailHost)
+`, mailHost, setupData.Domain, certPath, keyPath)
 }
 
 func (s *SystemService) generatePostfixMasterConfig() string {
