@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,8 +66,8 @@ func Bool(key string, value bool) Field {
 	return Field{Key: key, Value: value}
 }
 
-// Error 错误字段
-func Error(err error) Field {
+// ErrorField 错误字段
+func ErrorField(err error) Field {
 	if err == nil {
 		return Field{Key: "error", Value: nil}
 	}

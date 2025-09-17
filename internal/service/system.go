@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -393,7 +392,7 @@ func (s *SystemService) setupSSLCertificatePermissions(setupData *SetupConfig) e
 
 	for _, cmd := range commands {
 		log.Printf("执行: %s %v", cmd.cmd, cmd.args)
-		if err := s.securityService.ExecuteSecureCommand(cmd.cmd, cmd.args, 10*time.Second); err != nil {
+		if _, err := s.securityService.ExecuteSecureCommand(cmd.cmd, cmd.args, 10*time.Second); err != nil {
 			log.Printf("警告: %s失败: %v", cmd.desc, err)
 		} else {
 			log.Printf("成功: %s", cmd.desc)
