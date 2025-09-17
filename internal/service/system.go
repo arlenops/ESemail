@@ -476,6 +476,13 @@ smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
 smtpd_tls_security_level = may
 smtp_tls_security_level = may
 
+# SASL 认证配置
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = private/auth
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous,noplaintext
+smtpd_sasl_tls_security_options = noanonymous
+
 # 反垃圾邮件配置
 smtpd_milters = inet:localhost:11332, inet:localhost:8891
 non_smtpd_milters = inet:localhost:11332, inet:localhost:8891
