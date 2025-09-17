@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -413,28 +414,37 @@ func (q *MailQueue) SendEmail(from string, to []string, subject string, body str
 // buildRawMessage 构建原始邮件格式
 func (q *MailQueue) buildRawMessage(from string, to []string, subject string, body string, headers map[string]string) string {
 	var rawMessage string
-	
-	// 基本头部
-	rawMessage += fmt.Sprintf("From: %s\r\n", from)
-	rawMessage += fmt.Sprintf("To: %s\r\n", joinStrings(to, ", "))
-	rawMessage += fmt.Sprintf("Subject: %s\r\n", subject)
-	rawMessage += fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z))
-	rawMessage += "Content-Type: text/plain; charset=utf-8\r\n"
-	rawMessage += "MIME-Version: 1.0\r\n"
-	
-	// 自定义头部
+
+	// 直接使用已构建的头部，按照规范顺序输出重要头部
+	importantHeaders := []string{"From", "To", "Subject", "Date", "Message-ID", "MIME-Version", "Content-Type", "Content-Transfer-Encoding"}
+
+	// 先输出重要头部
+	for _, header := range importantHeaders {
+		if value, exists := headers[header]; exists {
+			rawMessage += fmt.Sprintf("%s: %s\r\n", header, value)
+		}
+	}
+
+	// 输出其他头部（排除已输出的重要头部）
 	for key, value := range headers {
-		if !isStandardHeader(key) {
+		isImportant := false
+		for _, important := range importantHeaders {
+			if strings.EqualFold(key, important) {
+				isImportant = true
+				break
+			}
+		}
+		if !isImportant {
 			rawMessage += fmt.Sprintf("%s: %s\r\n", key, value)
 		}
 	}
-	
+
 	// 空行分隔头部和正文
 	rawMessage += "\r\n"
-	
+
 	// 邮件正文
 	rawMessage += body
-	
+
 	return rawMessage
 }
 
@@ -457,16 +467,16 @@ func joinStrings(strs []string, sep string) string {
 // isStandardHeader 检查是否为标准头部
 func isStandardHeader(header string) bool {
 	standardHeaders := map[string]bool{
-		"From":         true,
-		"To":           true,
-		"Cc":           true,
-		"Bcc":          true,
-		"Subject":      true,
-		"Date":         true,
-		"Content-Type": true,
-		"MIME-Version": true,
+		"from":         true,
+		"to":           true,
+		"cc":           true,
+		"bcc":          true,
+		"subject":      true,
+		"date":         true,
+		"content-type": true,
+		"mime-version": true,
 	}
-	return standardHeaders[header]
+	return standardHeaders[strings.ToLower(header)]
 }
 
 // SendEmailWithHeaders 发送邮件（完整头部版本）

@@ -81,7 +81,7 @@ func (mas *MailAuthService) AuthenticateAndPrepareEmail(from, to, subject, body 
 	}
 	
 	// 添加DKIM签名到头部
-	headers["dkim-signature"] = dkimSignature
+	headers["DKIM-Signature"] = dkimSignature
 	
 	// 6. 计算权威性得分
 	authScore := mas.calculateAuthScore(from, headers, body)
@@ -135,34 +135,34 @@ func (mas *MailAuthService) validateSenderDomain(from string) error {
 // buildCompleteHeaders 构建完整的邮件头部
 func (mas *MailAuthService) buildCompleteHeaders(from, to, subject string, customHeaders map[string]string) map[string]string {
 	headers := make(map[string]string)
-	
-	// 基础头部
-	headers["from"] = from
-	headers["to"] = to
-	headers["subject"] = subject
-	headers["date"] = time.Now().UTC().Format(time.RFC1123Z)
-	headers["message-id"] = mas.generateMessageID(from)
-	headers["mime-version"] = "1.0"
-	headers["content-type"] = "text/plain; charset=utf-8"
-	headers["content-transfer-encoding"] = "8bit"
-	
+
+	// 基础头部（使用标准大小写）
+	headers["From"] = from
+	headers["To"] = to
+	headers["Subject"] = subject
+	headers["Date"] = time.Now().UTC().Format(time.RFC1123Z)
+	headers["Message-ID"] = mas.generateMessageID(from)
+	headers["MIME-Version"] = "1.0"
+	headers["Content-Type"] = "text/plain; charset=utf-8"
+	headers["Content-Transfer-Encoding"] = "8bit"
+
 	// 权威性相关头部
-	headers["x-mailer"] = "ESemail Server v1.0"
-	headers["x-priority"] = "3" // 正常优先级
-	headers["x-msmail-priority"] = "Normal"
-	headers["importance"] = "Normal"
-	
+	headers["X-Mailer"] = "ESemail Server v1.0"
+	headers["X-Priority"] = "3" // 正常优先级
+	headers["X-MSMail-Priority"] = "Normal"
+	headers["Importance"] = "Normal"
+
 	// 邮件服务器标识
-	headers["received"] = fmt.Sprintf("by %s (ESemail) with ESMTP id %s; %s",
+	headers["Received"] = fmt.Sprintf("by %s (ESemail) with ESMTP id %s; %s",
 		mas.getServerHostname(),
 		mas.generateTransactionID(),
 		time.Now().UTC().Format(time.RFC1123Z))
-	
+
 	// 添加自定义头部
 	for k, v := range customHeaders {
-		headers[strings.ToLower(k)] = v
+		headers[k] = v
 	}
-	
+
 	return headers
 }
 
@@ -222,14 +222,14 @@ func (mas *MailAuthService) validateHTMLContent(body string) error {
 // calculateAuthScore 计算权威性得分
 func (mas *MailAuthService) calculateAuthScore(from string, headers map[string]string, body string) int {
 	score := 50 // 基础分数
-	
+
 	// DKIM签名 +20分
-	if _, hasDKIM := headers["dkim-signature"]; hasDKIM {
+	if _, hasDKIM := headers["DKIM-Signature"]; hasDKIM {
 		score += 20
 	}
-	
+
 	// 完整的头部信息 +10分
-	requiredHeaders := []string{"from", "to", "subject", "date", "message-id"}
+	requiredHeaders := []string{"From", "To", "Subject", "Date", "Message-ID"}
 	completeHeaders := true
 	for _, header := range requiredHeaders {
 		if _, exists := headers[header]; !exists {
@@ -240,17 +240,17 @@ func (mas *MailAuthService) calculateAuthScore(from string, headers map[string]s
 	if completeHeaders {
 		score += 10
 	}
-	
+
 	// 域名管理状态 +15分
 	domain := strings.Split(from, "@")[1]
 	if mas.domainService.IsDomainManaged(domain) {
 		score += 15
 	}
-	
+
 	// 内容质量检查 -5到+5分
 	contentScore := mas.assessContentQuality(body)
 	score += contentScore
-	
+
 	// 确保分数在0-100范围内
 	if score < 0 {
 		score = 0
@@ -258,7 +258,7 @@ func (mas *MailAuthService) calculateAuthScore(from string, headers map[string]s
 	if score > 100 {
 		score = 100
 	}
-	
+
 	return score
 }
 
