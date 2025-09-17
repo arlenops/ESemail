@@ -595,6 +595,21 @@ userdb {
   args = uid=vmail gid=vmail home=/var/mail/vhosts/%%d/%%n
 }
 
+# 认证服务配置 (用于Postfix SASL)
+service auth {
+  unix_listener /var/spool/postfix/private/auth {
+    mode = 0660
+    user = postfix
+    group = postfix
+  }
+  unix_listener auth-master {
+    mode = 0600
+    user = vmail
+    group = vmail
+  }
+  user = dovecot
+}
+
 # IMAP 服务配置
 service imap-login {
   inet_listener imap {
