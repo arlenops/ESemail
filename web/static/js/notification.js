@@ -340,6 +340,22 @@ window.showAlert = (message, title, type = 'info') => {
     }
 };
 
+window.showSuccess = (message, title) => {
+    return window.notification.showSuccess(message, title);
+};
+
+window.showError = (message, title) => {
+    return window.notification.showError(message, title);
+};
+
+window.showInfo = (message, title) => {
+    return window.notification.showInfo(message, title);
+};
+
+window.showWarning = (message, title) => {
+    return window.notification.showWarning(message, title);
+};
+
 window.showConfirm = (message, title, options) => {
     return window.notification.showConfirm(message, title, options);
 };
