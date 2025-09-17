@@ -164,10 +164,19 @@ async function sendMail(event) {
             method: 'POST',
             body: JSON.stringify(mailData)
         });
-        
+
+        console.log('邮件发送响应状态:', response.status);
+
+        // 检查HTTP状态码
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
-        
+        console.log('邮件发送响应数据:', data);
+
         if (data.success) {
+            console.log('邮件发送成功，显示成功提示');
             showSuccess('邮件发送成功！');
             form.reset();
             // 刷新邮件历史
@@ -175,11 +184,12 @@ async function sendMail(event) {
                 refreshMailHistory();
             }, 1000);
         } else {
+            console.log('邮件发送失败:', data.error);
             showError('发送失败: ' + data.error);
         }
     } catch (error) {
-        console.error('Error:', error);
-        showError('发送请求失败');
+        console.error('邮件发送异常:', error);
+        showError('发送请求失败: ' + error.message);
     } finally {
         // 恢复提交按钮
         submitBtn.innerHTML = originalText;
@@ -405,13 +415,43 @@ function formatBytes(bytes) {
 
 // 初始化邮件管理功能
 function initMailManagement() {
-    // 绑定发送邮件表单事件
-    const sendMailForm = document.getElementById('send-mail-form');
-    if (sendMailForm) {
-        sendMailForm.addEventListener('submit', sendMail);
+    // 测试通知系统是否正常工作
+    function testNotificationSystem() {
+        console.log('测试通知系统...');
+        if (typeof showSuccess === 'function') {
+            console.log('showSuccess 函数可用');
+        } else {
+            console.error('showSuccess 函数不可用');
+        }
+        if (typeof showError === 'function') {
+            console.log('showError 函数可用');
+        } else {
+            console.error('showError 函数不可用');
+        }
+        if (typeof window.notification !== 'undefined') {
+            console.log('notification 对象可用');
+        } else {
+            console.error('notification 对象不可用');
+        }
     }
-    
-    // 当邮件tab被激活时，刷新数据
+
+    // 测试通知系统
+    setTimeout(testNotificationSystem, 500);
+
+    // 绑定发送邮件表单事件（延迟执行以确保表单已加载）
+    function bindMailFormEvents() {
+        const sendMailForm = document.getElementById('send-mail-form');
+        if (sendMailForm && !sendMailForm.hasAttribute('data-mail-events-bound')) {
+            sendMailForm.addEventListener('submit', sendMail);
+            sendMailForm.setAttribute('data-mail-events-bound', 'true');
+            console.log('邮件表单事件已绑定');
+        }
+    }
+
+    // 立即尝试绑定（如果表单已存在）
+    bindMailFormEvents();
+
+    // 当邮件tab被激活时，刷新数据并绑定事件
     const mailTabs = document.querySelectorAll('#mailTabs a');
     mailTabs.forEach(tab => {
         tab.addEventListener('shown.bs.tab', function(e) {
@@ -420,16 +460,20 @@ function initMailManagement() {
                 refreshMailHistory();
             } else if (target === '#mail-status') {
                 getMailServerStatus();
+            } else if (target === '#send-mail') {
+                // 当切换到发送邮件tab时，确保事件已绑定
+                setTimeout(bindMailFormEvents, 100);
             }
         });
     });
-    
-    // 当邮件section被激活时，刷新邮件历史
+
+    // 当邮件section被激活时，刷新邮件历史并绑定事件
     const mailNavLink = document.querySelector('a[data-section="mail"]');
     if (mailNavLink) {
         mailNavLink.addEventListener('click', function() {
             setTimeout(() => {
                 refreshMailHistory();
+                bindMailFormEvents(); // 确保表单事件已绑定
             }, 100);
         });
     }
