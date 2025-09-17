@@ -28,7 +28,7 @@ deploy_local() {
 
     # 检测并停止已运行的服务
     echo "🔍 检测业务端口..."
-    PORTS=(8686 25 465 587 993 995)
+    PORTS=(8686 25 465 587 143 993)
     for port in "${PORTS[@]}"; do
         PID=$(lsof -ti:$port 2>/dev/null || true)
         if [ ! -z "$PID" ]; then

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"sync"
 )
@@ -24,17 +25,18 @@ type MailServer struct {
 
 // MailServerConfig 邮件服务器配置
 type MailServerConfig struct {
-	Domain          string
-	DataDir         string
-	SMTPPort        string
-	SMTPSPort       string
-	IMAPPort        string
-	IMAPSPort       string
-	MaxMessageSize  int64
-	MaxRecipients   int
-	TLSCertFile     string
-	TLSKeyFile      string
-	EnableTLS       bool
+	Domain             string
+	DataDir            string
+	SMTPPort           string
+	SMTPSubmissionPort string
+	SMTPSPort          string
+	IMAPPort           string
+	IMAPSPort          string
+	MaxMessageSize     int64
+	MaxRecipients      int
+	TLSCertFile        string
+	TLSKeyFile         string
+	EnableTLS          bool
 }
 
 // NewMailServer 创建邮件服务器管理器
@@ -63,18 +65,43 @@ func NewMailServer(config *MailServerConfig, userService *UserService, domainSer
 		// 可以继续运行，但功能会受限
 	}
 	
-	// 配置TLS
+	// 配置TLS - 自动查找证书
 	var tlsConfig *tls.Config
-	if config.EnableTLS && config.TLSCertFile != "" && config.TLSKeyFile != "" {
-		cert, err := tls.LoadX509KeyPair(config.TLSCertFile, config.TLSKeyFile)
-		if err != nil {
-			log.Printf("加载TLS证书失败: %v", err)
-		} else {
-			tlsConfig = &tls.Config{
-				Certificates: []tls.Certificate{cert},
-				ServerName:   config.Domain,
+	if config.EnableTLS {
+		// 优先使用配置文件中指定的证书路径
+		certFile := config.TLSCertFile
+		keyFile := config.TLSKeyFile
+
+		// 如果配置文件中没有指定，则自动查找Let's Encrypt证书
+		if certFile == "" || keyFile == "" {
+			// 尝试查找域名对应的证书文件
+			certDir := fmt.Sprintf("/etc/ssl/mail/%s", config.Domain)
+			potentialCertFile := filepath.Join(certDir, "fullchain.pem")
+			potentialKeyFile := filepath.Join(certDir, "private.key")
+
+			// 检查证书文件是否存在
+			if _, err := os.Stat(potentialCertFile); err == nil {
+				if _, err := os.Stat(potentialKeyFile); err == nil {
+					certFile = potentialCertFile
+					keyFile = potentialKeyFile
+					log.Printf("自动找到域名 %s 的SSL证书: %s", config.Domain, certDir)
+				}
 			}
-			log.Println("TLS配置已启用")
+		}
+
+		if certFile != "" && keyFile != "" {
+			cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+			if err != nil {
+				log.Printf("加载TLS证书失败: %v", err)
+			} else {
+				tlsConfig = &tls.Config{
+					Certificates: []tls.Certificate{cert},
+					ServerName:   config.Domain,
+				}
+				log.Printf("TLS配置已启用，使用证书: %s", certFile)
+			}
+		} else {
+			log.Printf("TLS已启用但未找到证书文件，SMTP将仅支持STARTTLS")
 		}
 	}
 	
@@ -87,6 +114,8 @@ func NewMailServer(config *MailServerConfig, userService *UserService, domainSer
 		MaxRecipients:  config.MaxRecipients,
 		TLSConfig:      tlsConfig,
 	}
+
+	// TODO: 未来版本将添加587端口的独立SMTP提交服务器支持
 	
 	// 创建IMAP服务器配置
 	imapConfig := &IMAPConfig{
@@ -212,24 +241,27 @@ func (ms *MailServer) IsRunning() bool {
 func (ms *MailServer) GetStatus() *MailServerStatus {
 	ms.mutex.RLock()
 	defer ms.mutex.RUnlock()
-	
+
 	status := &MailServerStatus{
-		Running:       ms.running,
-		Domain:        ms.config.Domain,
-		SMTPPort:      ms.config.SMTPPort,
-		IMAPPort:      ms.config.IMAPPort,
-		TLSEnabled:    ms.config.EnableTLS,
+		Running:        ms.running,
+		Domain:         ms.config.Domain,
+		SMTPPort:       ms.config.SMTPPort,
+		SMTPSPort:      ms.config.SMTPSPort,
+		SubmissionPort: ms.config.SMTPSubmissionPort,
+		IMAPPort:       ms.config.IMAPPort,
+		IMAPSPort:      ms.config.IMAPSPort,
+		TLSEnabled:     ms.config.EnableTLS,
 	}
-	
+
 	if ms.running {
 		status.QueueStats = ms.mailQueue.GetQueueStats()
-		
+
 		// 获取存储统计
 		if storageStats, err := ms.mailStorage.GetStorageStats(); err == nil {
 			status.StorageStats = storageStats
 		}
 	}
-	
+
 	return status
 }
 
@@ -279,7 +311,10 @@ type MailServerStatus struct {
 	Running      bool          `json:"running"`
 	Domain       string        `json:"domain"`
 	SMTPPort     string        `json:"smtp_port"`
+	SMTPSPort    string        `json:"smtps_port"`
+	SubmissionPort string      `json:"submission_port"`
 	IMAPPort     string        `json:"imap_port"`
+	IMAPSPort    string        `json:"imaps_port"`
 	TLSEnabled   bool          `json:"tls_enabled"`
 	QueueStats   *QueueStats   `json:"queue_stats,omitempty"`
 	StorageStats *StorageStats `json:"storage_stats,omitempty"`

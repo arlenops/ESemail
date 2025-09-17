@@ -58,11 +58,12 @@ type MailConfig struct {
 	LogPath         string        `yaml:"log_path" json:"log_path" default:"./logs"`
 	Domains         []string      `yaml:"domains" json:"domains"`
 	AdminEmail      string        `yaml:"admin_email" json:"admin_email"`
-	SMTPPort        string        `yaml:"smtp_port" json:"smtp_port" env:"SMTP_PORT" default:"2525"`
-	SMTPSPort       string        `yaml:"smtps_port" json:"smtps_port" env:"SMTPS_PORT" default:"4465"`
-	IMAPPort        string        `yaml:"imap_port" json:"imap_port" env:"IMAP_PORT" default:"1143"`
-	IMAPSPort       string        `yaml:"imaps_port" json:"imaps_port" env:"IMAPS_PORT" default:"9993"`
-	EnableTLS       bool          `yaml:"enable_tls" json:"enable_tls" env:"MAIL_ENABLE_TLS" default:"false"`
+	SMTPPort        string        `yaml:"smtp_port" json:"smtp_port" env:"SMTP_PORT" default:"25"`
+	SMTPSubmissionPort string     `yaml:"smtp_submission_port" json:"smtp_submission_port" env:"SMTP_SUBMISSION_PORT" default:"587"`
+	SMTPSPort       string        `yaml:"smtps_port" json:"smtps_port" env:"SMTPS_PORT" default:"465"`
+	IMAPPort        string        `yaml:"imap_port" json:"imap_port" env:"IMAP_PORT" default:"143"`
+	IMAPSPort       string        `yaml:"imaps_port" json:"imaps_port" env:"IMAPS_PORT" default:"993"`
+	EnableTLS       bool          `yaml:"enable_tls" json:"enable_tls" env:"MAIL_ENABLE_TLS" default:"true"`
 	TLSCertFile     string        `yaml:"tls_cert_file" json:"tls_cert_file" env:"TLS_CERT_FILE"`
 	TLSKeyFile      string        `yaml:"tls_key_file" json:"tls_key_file" env:"TLS_KEY_FILE"`
 	MaxMessageSize  int64         `yaml:"max_message_size" json:"max_message_size" default:"26214400"`
@@ -130,11 +131,12 @@ func Load() (*Config, error) {
 			DataPath:       "./mail",
 			LogPath:        "./logs",
 			Domains:        []string{},
-			SMTPPort:       "2525",
-			SMTPSPort:      "4465",
-			IMAPPort:       "1143",
-			IMAPSPort:      "9993",
-			EnableTLS:      false,
+			SMTPPort:       "25",
+			SMTPSubmissionPort: "587",
+			SMTPSPort:      "465",
+			IMAPPort:       "143",
+			IMAPSPort:      "993",
+			EnableTLS:      true,
 			MaxMessageSize: 25 * 1024 * 1024, // 25MB
 			MaxRecipients:  100,
 			QueueRetries:   3,

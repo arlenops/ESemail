@@ -36,11 +36,12 @@ mail:
   log_path: "./logs"           # 应用日志目录
   domains: []                   # 额外域名列表（可选）
   admin_email: "admin@yourdomain.com" # 管理员邮箱（用于初始化与通知）
-  smtp_port: "2525"            # 内置 SMTP（开发用途）
-  smtps_port: "4465"           # 内置 SMTPS（开发用途）
-  imap_port: "1143"            # 内置 IMAP（开发用途）
-  imaps_port: "9993"           # 内置 IMAPS（开发用途）
-  enable_tls: false             # 内置协议是否启用TLS（生产建议false，由系统级MTA处理TLS）
+  smtp_port: "25"              # SMTP 端口（标准）
+  smtp_submission_port: "587"  # SMTP 提交端口（STARTTLS）
+  smtps_port: "465"            # SMTPS 端口（SSL）
+  imap_port: "143"             # IMAP 端口（标准）
+  imaps_port: "993"            # IMAPS 端口（SSL）
+  enable_tls: true             # 启用 TLS/SSL 加密（生产环境推荐）
   tls_cert_file: ""             # 内置TLS证书（生产留空）
   tls_key_file: ""              # 内置TLS私钥（生产留空）
   max_message_size: 26214400    # 最大邮件大小（字节），默认25MB
