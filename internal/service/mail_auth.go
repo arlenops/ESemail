@@ -126,7 +126,7 @@ func (mas *MailAuthService) validateSenderDomain(from string) error {
 	
 	// 检查域名是否在我们的管理范围内
 	if !mas.domainService.IsDomainManaged(domain) {
-		return fmt.Errorf("域名 %s 未被系统管理", domain)
+		return fmt.Errorf("域名 %s 未被系统管理，请先在域名管理中添加此域名", domain)
 	}
 	
 	return nil

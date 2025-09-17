@@ -91,17 +91,20 @@ func NewDomainServiceWithConfig(dataDir string) *DomainService {
 
 // IsDomainManaged 检查域名是否被管理
 func (s *DomainService) IsDomainManaged(domain string) bool {
-	// 这里应该从存储中检查域名
-	// 暂时使用硬编码的域名列表
-	managedDomains := []string{"example.com", "test.com", "localhost"}
-	
+	// 从存储中获取实际的域名列表
+	domains, err := s.loadDomains()
+	if err != nil {
+		log.Printf("检查域名管理状态时加载域名失败: %v", err)
+		return false
+	}
+
 	domain = strings.ToLower(domain)
-	for _, managedDomain := range managedDomains {
-		if domain == managedDomain {
+	for _, managedDomain := range domains {
+		if strings.ToLower(managedDomain.Domain) == domain {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
