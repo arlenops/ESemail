@@ -28,21 +28,35 @@ let pageSize = 50;
 
 // 刷新邮件历史
 async function refreshMailHistory() {
+    console.log('refreshMailHistory: 开始刷新邮件历史');
     const tbody = document.getElementById('mail-history-body');
+
+    if (!tbody) {
+        console.error('refreshMailHistory: 未找到 mail-history-body 元素');
+        return;
+    }
+
     tbody.innerHTML = '<tr><td colspan="8" class="text-center"><i class="fas fa-spinner fa-spin"></i> 加载中...</td></tr>';
 
     try {
-        const response = await authenticatedFetch('/api/v1/mail/history?page=' + currentPage + '&page_size=' + pageSize);
+        const url = '/api/v1/mail/history?page=' + currentPage + '&page_size=' + pageSize;
+        console.log('refreshMailHistory: 请求URL:', url);
+
+        const response = await authenticatedFetch(url);
         const data = await response.json();
 
+        console.log('refreshMailHistory: 响应数据:', data);
+
         if (data.success) {
+            console.log('refreshMailHistory: 成功获取数据，记录数:', data.data?.records?.length || 0);
             displayMailHistory(data.data);
         } else {
+            console.error('refreshMailHistory: 获取数据失败:', data.error);
             showError('获取邮件历史失败: ' + data.error);
             tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">获取数据失败</td></tr>';
         }
     } catch (error) {
-        console.error('Error:', error);
+        console.error('refreshMailHistory: 网络请求异常:', error);
         showError('网络请求失败');
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-danger">网络请求失败</td></tr>';
     }
@@ -50,24 +64,29 @@ async function refreshMailHistory() {
 
 // 显示邮件历史
 function displayMailHistory(data) {
+    console.log('displayMailHistory: 开始显示邮件历史', data);
     const tbody = document.getElementById('mail-history-body');
-    
+
     if (!data || !data.records || data.records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-4"><i class="fas fa-envelope fa-2x mb-2"></i><br>暂无邮件记录</td></tr>';
         return;
     }
-    
+
     mailHistory = data.records;
     let html = '';
-    
-    data.records.forEach(mail => {
+
+    data.records.forEach((mail, index) => {
         const statusBadge = getStatusBadge(mail.status);
         const directionBadge = getDirectionBadge(mail.direction);
         const formattedDate = new Date(mail.timestamp).toLocaleString('zh-CN');
         const sizeFormatted = formatBytes(mail.size);
-        
+
+        // 如果是最新的邮件（索引为0）并且是出站邮件，高亮显示
+        const isNewOutbound = index === 0 && mail.direction === 'outbound';
+        const rowClass = isNewOutbound ? 'table-success' : '';
+
         html += `
-            <tr>
+            <tr class="${rowClass}">
                 <td>${formattedDate}</td>
                 <td title="${mail.from}">${truncateString(mail.from, 20)}</td>
                 <td title="${mail.to.join(', ')}">${truncateString(mail.to.join(', '), 20)}</td>
@@ -88,8 +107,26 @@ function displayMailHistory(data) {
             </tr>
         `;
     });
-    
+
     tbody.innerHTML = html;
+    console.log('displayMailHistory: 邮件历史显示完成，记录数:', data.records.length);
+
+    // 如果有新的出站邮件，显示提示
+    if (data.records.length > 0 && data.records[0].direction === 'outbound') {
+        const latestMail = data.records[0];
+        const timeDiff = Date.now() - new Date(latestMail.timestamp).getTime();
+
+        // 如果邮件是在最近2分钟内发送的，显示提示
+        if (timeDiff < 120000) {
+            console.log('发现新发送的邮件:', latestMail);
+
+            // 滚动到表格顶部
+            const table = document.querySelector('#mail-history table');
+            if (table) {
+                table.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    }
 }
 
 // 搜索邮件
@@ -177,11 +214,44 @@ async function sendMail(event) {
 
         if (data.success) {
             console.log('邮件发送成功，显示成功提示');
-            showSuccess('邮件发送成功！');
+
+            // 测试通知函数是否可用
+            if (typeof showSuccess === 'function') {
+                console.log('调用 showSuccess 函数');
+                showSuccess('邮件发送成功！');
+            } else {
+                console.error('showSuccess 函数不可用');
+                alert('邮件发送成功！'); // 备用提示
+            }
+
             form.reset();
+
+            // 增加一个视觉反馈，立即显示成功状态
+            const successMessage = document.createElement('div');
+            successMessage.className = 'alert alert-success mt-3';
+            successMessage.innerHTML = '<i class="fas fa-check-circle"></i> 邮件已成功发送到队列！正在刷新历史记录...';
+            form.parentNode.appendChild(successMessage);
+
             // 刷新邮件历史
             setTimeout(() => {
+                console.log('开始刷新邮件历史');
+
+                // 自动切换到邮件历史标签
+                const mailHistoryTab = document.querySelector('a[href="#mail-history"]');
+                if (mailHistoryTab) {
+                    console.log('切换到邮件历史标签');
+                    const tabInstance = new bootstrap.Tab(mailHistoryTab);
+                    tabInstance.show();
+                }
+
                 refreshMailHistory();
+
+                // 移除临时成功消息
+                setTimeout(() => {
+                    if (successMessage.parentNode) {
+                        successMessage.parentNode.removeChild(successMessage);
+                    }
+                }, 3000);
             }, 1000);
         } else {
             console.log('邮件发送失败:', data.error);
