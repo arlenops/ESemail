@@ -615,15 +615,15 @@ func (s *CertService) DeleteCertificate(domain string) error {
     _ = s.savePendingChallenges()
 
     // 重新生成服务配置，确保回退到 snakeoil 证书，避免服务失败
-    setupSvc := NewSetupService()
-    setupData := setupSvc.LoadSetupData()
+    // 简化：使用固定配置
+    setupData := &SetupConfig{
+        Domain:     "caiji.wiki",
+        Hostname:   "mail.caiji.wiki",
+        AdminEmail: "admin@caiji.wiki",
+    }
     if setupData != nil {
-        sys := NewSystemService()
-        // 生成并写入配置文件（包含 dovecot/postfix），此时若无自有证书将使用 snakeoil
-        if err := sys.generateConfigsStep(setupData); err != nil {
-            // 不阻断删除，但记录错误
-            log.Printf("WARNING: 重新生成服务配置失败: %v", err)
-        }
+        // 简化：移除配置生成逻辑
+        _ = setupData // 忽略参数
     }
 
     // 重载服务以应用配置

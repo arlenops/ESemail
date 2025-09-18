@@ -44,22 +44,16 @@ func NewMailServer(config *MailServerConfig, userService *UserService, domainSer
 	// 初始化邮件存储
 	mailStorage := NewMailStorage(filepath.Join(config.DataDir, "mail"))
 	
-	// 初始化DNS服务
-	dnsService := NewDNSService()
 	
-	// 初始化邮件权威性认证服务
+	// 初始化邮件认证服务
 	authConfig := &MailAuthConfig{
-		Domain:              config.Domain,
-		DKIMSelector:        "default",
-		DKIMKeyPath:         filepath.Join(config.DataDir, "dkim"),
-		EnableSPFCheck:      true,
-		EnableDMARCCheck:    true,
-		EnableContentFilter: true,
-		MaxMessageSize:      config.MaxMessageSize,
-		TrustedIPs:          []string{},
+		Domain:         config.Domain,
+		DKIMSelector:   "default",
+		DKIMKeyPath:    filepath.Join(config.DataDir, "dkim"),
+		MaxMessageSize: config.MaxMessageSize,
 	}
 	
-	authService, err := NewMailAuthService(authConfig, domainService, dnsService)
+	authService, err := NewMailAuthService(authConfig, domainService)
 	if err != nil {
 		log.Printf("警告: 邮件认证服务初始化失败: %v", err)
 		// 可以继续运行，但功能会受限

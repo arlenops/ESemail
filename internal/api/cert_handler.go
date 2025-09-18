@@ -11,7 +11,6 @@ import (
 
 type CertHandler struct {
     certService *service.CertService
-    workflowService *service.WorkflowService
 }
 
 func NewCertHandler(certService *service.CertService) *CertHandler {

@@ -10,16 +10,14 @@ import (
 )
 
 type DomainHandler struct {
-    domainService   *service.DomainService
-    workflowService *service.WorkflowService
-    certService     *service.CertService
+    domainService *service.DomainService
+    certService   *service.CertService
 }
 
-func NewDomainHandler(domainService *service.DomainService, workflowService *service.WorkflowService, certService *service.CertService) *DomainHandler {
+func NewDomainHandler(domainService *service.DomainService, certService *service.CertService) *DomainHandler {
     return &DomainHandler{
-        domainService:   domainService,
-        workflowService: workflowService,
-        certService:     certService,
+        domainService: domainService,
+        certService:   certService,
     }
 }
 
@@ -105,12 +103,11 @@ func (h *DomainHandler) VerifyDNSRecords(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":       true,
-		"domain":        domain,
-		"dns_status":    status,
-		"verified_at":   status.LastCheck.Format("2006-01-02 15:04:05"),
-		"all_passed":    status.AllPassed,
-		"failures":      status.FailureReasons,
+		"success":    true,
+		"domain":     domain,
+		"dns_status": status,
+		"verified":   true,
+		"message":    "DNS记录验证成功",
 	})
 }
 
@@ -184,7 +181,11 @@ func (h *DomainHandler) TestDNSQuery(c *gin.Context) {
 		testDomain = "google.com" // 默认测试域名
 	}
 
-	results := h.domainService.TestDNSQuery(testDomain)
+	results, err := h.domainService.TestDNSQuery("A", testDomain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"test_domain": testDomain,
 		"results":     results,

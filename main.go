@@ -22,10 +22,7 @@ func main() {
         log.Fatalf("存储初始化失败: %v", err)
     }
 
-    // 初始化设置服务（不再覆盖配置，配置已固定）
-    settingsService := service.NewAppSettingsService(dataDir)
-
-    // 初始化服务
+    // 初始化核心服务
     validationService := service.NewValidationService()
     authService := service.NewAuthService()
     healthService := service.NewHealthService()
@@ -36,64 +33,44 @@ func main() {
     if err != nil {
         log.Fatalf("证书服务初始化失败: %v", err)
     }
-    setupService := service.NewSetupService()
-    environmentService := service.NewEnvironmentService()
-    dnsService := service.NewDNSService()
-	
-    // 初始化工作流服务
-    workflowService := service.NewWorkflowService(dataDir)
-	
-	// 初始化邮件服务器
-	mailServerConfig := &service.MailServerConfig{
-		Domain:         cfg.Mail.Domain,
-		DataDir:        dataDir,
-		SMTPPort:       cfg.Mail.SMTPPort,
-		SMTPSPort:      cfg.Mail.SMTPSPort,
-		IMAPPort:       cfg.Mail.IMAPPort,
-		IMAPSPort:      cfg.Mail.IMAPSPort,
-		MaxMessageSize: cfg.Mail.MaxMessageSize,
-		MaxRecipients:  cfg.Mail.MaxRecipients,
-		TLSCertFile:    cfg.Mail.TLSCertFile,
-		TLSKeyFile:     cfg.Mail.TLSKeyFile,
-		EnableTLS:      cfg.Mail.EnableTLS,
-	}
-	
-	mailServer, err := service.NewMailServer(mailServerConfig, userService, domainService)
-	if err != nil {
-		log.Fatalf("创建邮件服务器失败: %v", err)
-	}
-	
-	// 启动邮件服务器
-	if err := mailServer.Start(); err != nil {
-		log.Printf("启动邮件服务器失败: %v", err)
-	} else {
-		log.Println("邮件服务器启动成功")
-	}
-	
-	// 为工作流服务设置服务引用
-	workflowService.SetServiceReferences(
-		systemService,
-		domainService,
-		userService,
-		certService,
-		mailServer,
-	)
-	
+
+    // 初始化邮件服务器
+    mailServerConfig := &service.MailServerConfig{
+        Domain:         cfg.Mail.Domain,
+        DataDir:        dataDir,
+        SMTPPort:       cfg.Mail.SMTPPort,
+        SMTPSPort:      cfg.Mail.SMTPSPort,
+        IMAPPort:       cfg.Mail.IMAPPort,
+        IMAPSPort:      cfg.Mail.IMAPSPort,
+        MaxMessageSize: cfg.Mail.MaxMessageSize,
+        MaxRecipients:  cfg.Mail.MaxRecipients,
+        TLSCertFile:    cfg.Mail.TLSCertFile,
+        TLSKeyFile:     cfg.Mail.TLSKeyFile,
+        EnableTLS:      cfg.Mail.EnableTLS,
+    }
+
+    mailServer, err := service.NewMailServer(mailServerConfig, userService, domainService)
+    if err != nil {
+        log.Fatalf("创建邮件服务器失败: %v", err)
+    }
+
+    // 启动邮件服务器
+    if err := mailServer.Start(); err != nil {
+        log.Printf("启动邮件服务器失败: %v", err)
+    } else {
+        log.Println("邮件服务器启动成功")
+    }
+
     router := api.SetupRouter(
-        cfg, 
-        healthService, 
-        systemService, 
-        domainService, 
-        userService, 
-        mailServer, 
-        certService, 
-        setupService, 
+        cfg,
+        healthService,
+        systemService,
+        domainService,
+        userService,
+        mailServer,
+        certService,
         authService,
         validationService,
-        environmentService,
-        dnsService,
-        workflowService,
-        settingsService,
     )
 
     // 启动健康检查定时器（每5分钟），用于周期性检查
@@ -107,7 +84,7 @@ func main() {
     }()
 
     log.Printf("ESemail 控制面启动在端口 :%s", cfg.Server.Port)
-	if err := router.Run(":" + cfg.Server.Port); err != nil {
-		log.Fatalf("服务启动失败: %v", err)
-	}
+    if err := router.Run(":" + cfg.Server.Port); err != nil {
+        log.Fatalf("服务启动失败: %v", err)
+    }
 }
