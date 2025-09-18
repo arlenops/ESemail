@@ -94,7 +94,7 @@ function checkAuthToken() {
 function initializeEventListeners() {
     // 不在这里添加导航事件监听器，改为在updateNavigationUI中统一处理
 
-    document.getElementById('init-system-btn').addEventListener('click', initializeSystem);
+    // 系统初始化按钮已移除
     document.getElementById('add-domain-form').addEventListener('submit', addDomain);
     document.getElementById('add-user-form').addEventListener('submit', addUser);
     document.getElementById('issue-cert-form').addEventListener('submit', issueCertificate);
@@ -156,30 +156,23 @@ function showSection(section) {
 
 async function checkSystemStatus() {
     try {
-        const response = await fetch('/api/v1/setup/status');
-        const status = await response.json();
-        
-        if (!status.is_setup) {
-            window.location.href = '/';
+        // 简化：直接检查系统状态，不再检查设置状态
+        const initResponse = await fetch('/api/v1/system/status');
+        if (!initResponse.ok) {
+            console.log('系统状态检查失败，可能需要初始化');
             return;
         }
-        
-        // 检查系统初始化状态
-        const initResponse = await fetch('/api/v1/system/init-status');
+
         const initStatus = await initResponse.json();
-        
-        if (!initStatus.is_initialized) {
-            showInitializationModal();
-        }
+        console.log('系统状态:', initStatus);
+
+        // 系统已经简化，不需要显示初始化模态框
     } catch (error) {
         console.error('检查系统状态失败:', error);
     }
 }
 
-function showInitializationModal() {
-    const modal = new bootstrap.Modal(document.getElementById('system-init-modal'));
-    modal.show();
-}
+// 系统初始化模态框已移除
 
 // 初始化导航系统
 function initializeNavigation() {
@@ -209,49 +202,7 @@ function initializeNavigation() {
     });
 }
 
-async function initializeSystem() {
-    const btn = document.getElementById('init-system-btn');
-    const progress = document.getElementById('init-progress');
-    const stepsDiv = document.getElementById('init-steps');
-    
-    btn.disabled = true;
-    btn.textContent = '初始化中...';
-    progress.classList.remove('d-none');
-    
-    try {
-        const response = await fetch('/api/v1/system/init', { method: 'POST' });
-        const result = await response.json();
-        
-        const progressBar = progress.querySelector('.progress-bar');
-        const totalSteps = result.steps.length;
-        
-        result.steps.forEach((step, index) => {
-            const progress = ((index + 1) / totalSteps) * 100;
-            progressBar.style.width = progress + '%';
-            progressBar.textContent = Math.round(progress) + '%';
-            
-            const stepDiv = document.createElement('div');
-            stepDiv.className = `alert ${step.status === 'completed' ? 'alert-success' : step.status === 'failed' ? 'alert-danger' : 'alert-info'}`;
-            stepDiv.textContent = `${step.description}: ${step.status === 'completed' ? '完成' : step.status === 'failed' ? '失败 - ' + step.error : '进行中'}`;
-            stepsDiv.appendChild(stepDiv);
-        });
-        
-        if (result.success) {
-            // 系统初始化成功
-            setTimeout(() => {
-                showModal('系统初始化完成', '系统已成功初始化，现在可以使用所有功能模块。', 'success');
-            }, 2000);
-        } else {
-            btn.disabled = false;
-            btn.textContent = '重试初始化';
-            showModal('初始化失败', '系统初始化失败，请检查日志并重试。', 'error');
-        }
-    } catch (error) {
-        console.error('初始化失败:', error);
-        btn.disabled = false;
-        btn.textContent = '重试初始化';
-    }
-}
+// 系统初始化功能已移除
 
 async function refreshDashboard() {
     if (currentSection !== 'dashboard') return;
@@ -370,7 +321,8 @@ async function loadDomainsForUserForm() {
         if (domainSelect) {
             domainSelect.innerHTML = '<option value="">选择域名</option>';
             domains.forEach(domain => {
-                domainSelect.innerHTML += `<option value="${domain.domain}">${domain.domain}</option>`;
+                const domainName = domain.email_domain || domain.domain || domain.name;
+                domainSelect.innerHTML += `<option value="${domainName}">${domainName}</option>`;
             });
         }
     } catch (error) {
@@ -387,16 +339,17 @@ async function loadDomains() {
         
         let html = '<div class="row">';
         domains.forEach(domain => {
+            const domainName = domain.email_domain || domain.domain || domain.name;
             html += `
                 <div class="col-md-6 mb-3">
                     <div class="card">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5>${domain.name}</h5>
+                            <h5>${domainName}</h5>
                             <span class="badge ${domain.active ? 'bg-success' : 'bg-secondary'}">${domain.active ? '活跃' : '禁用'}</span>
                         </div>
                         <div class="card-body">
-                            <button class="btn btn-sm btn-outline-primary" onclick="viewDNSRecords('${domain.name}')">查看DNS记录</button>
-                            <button class="btn btn-sm btn-outline-danger" onclick="deleteDomain('${domain.name}')">删除域名</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="viewDNSRecords('${domainName}')">查看DNS记录</button>
+                            <button class="btn btn-sm btn-outline-danger" onclick="deleteDomain('${domainName}')">删除域名</button>
                         </div>
                     </div>
                 </div>
@@ -1088,4 +1041,132 @@ async function showDNSSetupGuide(domain) {
         // 如果获取失败，至少显示一个成功提示
         showModal('域名添加成功', `域名 ${domain} 添加成功！请在域名管理页面查看DNS配置要求。`, 'success');
     }
+}
+
+// 添加缺失的函数
+async function viewDNSRecords(domain) {
+    try {
+        const response = await fetch(`/api/v1/domains/${domain}/dns-check`, {
+            headers: getAuthHeaders()
+        });
+        const result = await response.json();
+
+        if (response.ok) {
+            showModal('DNS记录状态', `域名 ${domain} 的DNS记录检查完成`, 'info');
+        } else {
+            showModal('DNS检查失败', result.error || 'DNS检查失败', 'error');
+        }
+    } catch (error) {
+        console.error('DNS记录查看失败:', error);
+        showModal('DNS检查失败', '网络错误，请重试', 'error');
+    }
+}
+
+async function deleteDomain(domain) {
+    if (domain === 'caiji.wiki') {
+        showModal('删除失败', '不能删除主域名', 'warning');
+        return;
+    }
+
+    if (!confirm(`确定要删除域名 ${domain} 吗？此操作不可撤销。`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/v1/domains/${domain}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+            showModal('删除成功', '域名删除成功', 'success');
+            loadDomains();
+        } else {
+            const result = await response.json();
+            showModal('删除失败', result.error || '域名删除失败', 'error');
+        }
+    } catch (error) {
+        console.error('删除域名失败:', error);
+        showModal('删除失败', '网络错误，请重试', 'error');
+    }
+}
+
+async function resetUserPassword(userId) {
+    if (!confirm('确定要重置该用户的密码吗？')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/v1/users/${userId}/reset-password`, {
+            method: 'POST',
+            headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showModal('重置成功', `密码重置成功，新密码：${result.new_password}`, 'success');
+        } else {
+            const result = await response.json();
+            showModal('重置失败', result.error || '密码重置失败', 'error');
+        }
+    } catch (error) {
+        console.error('重置密码失败:', error);
+        showModal('重置失败', '网络错误，请重试', 'error');
+    }
+}
+
+async function deleteUser(userId) {
+    if (!confirm('确定要删除该用户吗？此操作不可撤销。')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/v1/users/${userId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+            showModal('删除成功', '用户删除成功', 'success');
+            loadUsers();
+        } else {
+            const result = await response.json();
+            showModal('删除失败', result.error || '用户删除失败', 'error');
+        }
+    } catch (error) {
+        console.error('删除用户失败:', error);
+        showModal('删除失败', '网络错误，请重试', 'error');
+    }
+}
+
+async function viewMailDetail(mailId) {
+    try {
+        const response = await fetch(`/api/v1/mail/history/${mailId}`, {
+            headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+            const mail = await response.json();
+            showModal('邮件详情', `
+                <div class="text-left">
+                    <p><strong>发件人:</strong> ${mail.from}</p>
+                    <p><strong>收件人:</strong> ${mail.to.join(', ')}</p>
+                    <p><strong>主题:</strong> ${mail.subject}</p>
+                    <p><strong>时间:</strong> ${new Date(mail.timestamp).toLocaleString()}</p>
+                    <p><strong>状态:</strong> ${mail.status}</p>
+                </div>
+            `, 'info');
+        } else {
+            showModal('查看失败', '邮件详情获取失败', 'error');
+        }
+    } catch (error) {
+        console.error('查看邮件详情失败:', error);
+        showModal('查看失败', '网络错误，请重试', 'error');
+    }
+}
+
+function loadMailHistoryPage(page) {
+    if (page < 1) return;
+    // 这里可以添加分页逻辑
+    loadMailHistory();
 }
